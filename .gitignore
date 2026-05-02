@@ -1,0 +1,13 @@
+# Entorno Virtual
+venv/
+__pycache__/
+*.pyc
+
+# Datos Sensibles y Biométricos (Seguridad y Privacidad)[cite: 1]
+data/security/secret.key
+data/profiles/encrypted_registry.bin
+data/attendance/master_log.csv
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
