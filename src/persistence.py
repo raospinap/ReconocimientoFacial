@@ -23,31 +23,22 @@ class PersistenceManager:
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
     def save_profiles(self, profiles_dict):
-        """
-        Serializa el diccionario de perfiles, lo cifra y lo persiste en disco.
-        """
-        # Paso 1: Serialización binaria ligera (RNF-04)[cite: 1]
-        packed_data = msgpack.packb(profiles_dict)
-        
-        # Paso 2: Cifrado AES-256 (RNF-05)[cite: 1]
+        """Serializa con soporte para strings de Python 3."""
+        # Usamos use_bin_type=True para diferenciar bytes de strings
+        packed_data = msgpack.packb(profiles_dict, use_bin_type=True)
         encrypted_data = self.sm.encrypt_data(packed_data)
-        
         with open(self.profiles_path, 'wb') as f:
             f.write(encrypted_data)
 
     def load_profiles(self):
-        """
-        Carga el registro cifrado y lo devuelve como un diccionario de Python[cite: 1].
-        """
+        """Descifra y desempaqueta tratando bytes como strings (raw=False)."""
         if not os.path.exists(self.profiles_path):
             return {}
-            
         with open(self.profiles_path, 'rb') as f:
             encrypted_data = f.read()
-            
-        # Descifrado y deserialización[cite: 1]
         decrypted_data = self.sm.decrypt_data(encrypted_data)
-        return msgpack.unpackb(decrypted_data)
+        # raw=False asegura que las llaves vuelvan como strings y no como b'...'
+        return msgpack.unpackb(decrypted_data, raw=False)
 
     def log_attendance(self, student_data):
         """
