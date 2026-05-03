@@ -36,20 +36,27 @@ class PersistenceManager:
         """Descifra y desempaqueta tratando bytes como strings (raw=False)."""
         if not os.path.exists(self.profiles_path):
             return {}
-        with open(self.profiles_path, 'rb') as f:
-            encrypted_data = f.read()
-        decrypted_data = self.sm.decrypt_data(encrypted_data)
-        # raw=False asegura que las llaves vuelvan como strings y no como b'...'
-        return msgpack.unpackb(decrypted_data, raw=False)
-
+        try:
+            with open(self.profiles_path, 'rb') as f:
+                encrypted_data = f.read()
+            
+            # Usamos self.sm que es como definiste el security_manager en el __init__
+            decrypted_data = self.sm.decrypt_data(encrypted_data)
+            
+            # raw=False es CRÍTICO para evitar el KeyError: 'embedding'
+            return msgpack.unpackb(decrypted_data, raw=False)
+        except Exception as e:
+            print(f"[ERROR] Fallo al cargar perfiles: {e}")
+            return {}
+            
     def log_attendance(self, student_data):
         """
-        Registra la asistencia en el log maestro CSV (Fuente de verdad)[cite: 1].
+        Registra la asistencia en el log maestro CSV.
         student_data debe contener: {'codigo', 'nombre', 'confianza'}
         """
         file_exists = os.path.isfile(self.log_path)
         
-        # Estructura de datos según requerimiento RF-06[cite: 1]
+        # Estructura de datos según requerimiento RF-06]
         row = {
             'timestamp': datetime.now().isoformat(),
             'codigo_estudiante': student_data['codigo'],
@@ -59,5 +66,30 @@ class PersistenceManager:
         }
         
         df = pd.DataFrame([row])
-        # Añade al final del archivo sin sobreescribir[cite: 1]
+        # Añade al final del archivo sin sobreescribir]
         df.to_csv(self.log_path, mode='a', index=False, header=not file_exists)
+      
+    def load_registry(self):
+        """
+        Carga y descifra la base de datos de perfiles biométricos 
+        utilizando el bus de datos msgpack definido en la arquitectura.
+        """
+        if not os.path.exists(self.profiles_path):
+            return {}
+
+        try:
+            # 1. Lectura del binario
+            with open(self.profiles_path, "rb") as f:
+                encrypted_data = f.read()
+
+            # 2. Descifrado usando el alias correcto (self.sm)
+            decrypted_data = self.sm.decrypt_data(encrypted_data)
+
+            # 3. Deserialización usando msgpack para consistencia técnica
+            # raw=False asegura que las llaves se recuperen como strings
+            registry = msgpack.unpackb(decrypted_data, raw=False)
+            return registry
+
+        except Exception as e:
+            print(f"[ERROR] Fallo en la carga del registro biométrico: {e}")
+            return {}
