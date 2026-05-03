@@ -1,3 +1,5 @@
+# src/security_manager.py
+
 import os
 from cryptography.fernet import Fernet
 
