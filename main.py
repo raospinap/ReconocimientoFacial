@@ -6,6 +6,9 @@ try:
 except ImportError:
     pass
 # --------------------------------
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import cv2
 import numpy as np
@@ -108,12 +111,12 @@ def start_identification():
                         current_best_match = dist
                 # ---------------------------------------------------
 
-                # Umbral de confianza ajustado a 0.60 para mayor flexibilidad[cite: 14]
-                if current_best_match > 0.60 and current_best_match > best_dist:
+                # Umbral de confianza 
+                if current_best_match > 0.82 and current_best_match > best_dist:
                     best_dist = current_best_match
                     match_name = user_name
 
-            # 4. Renderizado de resultados en pantalla[cite: 14]
+            # 4. Renderizado de resultados en pantalla
             x, y, w, h = face_area['x'], face_area['y'], face_area['w'], face_area['h']
             color = (0, 255, 0) if match_name != "Desconocido" else (0, 0, 255)
             
