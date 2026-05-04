@@ -19,15 +19,24 @@ def main():
     # 1. Inicialización de la arquitectura técnica
     sm = SecurityManager()
     pm = PersistenceManager(sm)
-    em = EnrollmentManager()
+    
 
     print("--- Sistema de Enrolamiento Local ---")
     nombre = input("Ingresa el nombre completo del estudiante: ")
     codigo = input("Ingresa el código estudiantil: ")
 
+    # Cargar el registro actual desde el archivo  cifrado
+    profiles = pm.load_profiles()
+
+    # Comprobamos si el código ya existe en el diccionario antes de abrir la cámara
+    if codigo in profiles:
+        print(f"\n[ERROR] El código '{codigo}' ya se encuentra registrado en el sistema.")
+        return # Finaliza el script inmediatamente
+
+    em = EnrollmentManager()
+    
     # 2. Captura y Extracción Biométrica (RF-01, RF-04)
-    # Nota: La primera vez descargará el modelo ArcFace (~145MB)
-    vector = em.enroll_student(nombre, codigo)
+    vector = em.enroll_student(nombre, codigo, profiles)
 
     if vector is not None:
         # 3. Carga del registro actual
