@@ -50,42 +50,24 @@ class PersistenceManager:
             return {}
             
     def log_attendance(self, student_data):
-        """Registra asistencia evitando duplicados para el mismo estudiante, clase y fecha."""
-        import pandas as pd
-        from datetime import datetime
+        """
+        Registra la asistencia en el log maestro CSV.
+        student_data debe contener: {'codigo', 'nombre', 'confianza'}
+        """
+        file_exists = os.path.isfile(self.log_path)
         
-        file_exists = os.path.exists(self.log_path)
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        class_name = student_data.get('clase', 'Sin Clase')
-        student_id = str(student_data['codigo'])
-
-        if file_exists:
-            try:
-                # Forzamos la lectura del código como string para evitar errores de comparación
-                df_existing = pd.read_csv(self.log_path, dtype={'codigo_estudiante': str})
-                
-                # Validación de duplicado: mismo código, misma clase, misma fecha
-                duplicates = df_existing[
-                    (df_existing['codigo_estudiante'].astype(str) == student_id) & 
-                    (df_existing['clase_nombre'] == class_name) &
-                    (df_existing['timestamp'].str.contains(current_date))
-                ]
-                if not duplicates.empty:
-                    return False # Ya existe registro hoy
-            except: pass
-
+        # Estructura de datos según requerimiento RF-06]
         row = {
             'timestamp': datetime.now().isoformat(),
-            'codigo_estudiante': student_id,
+            'codigo_estudiante': student_data['codigo'],
             'nombre': student_data['nombre'],
             'confianza_score': student_data['confianza'],
-            'clase_nombre': class_name, 
-            'sesion_id': student_data.get('session_id', current_date.replace("-",""))
+            'sesion_id': datetime.now().strftime('%Y%m%d')
         }
         
         df = pd.DataFrame([row])
+        # Añade al final del archivo sin sobreescribir]
         df.to_csv(self.log_path, mode='a', index=False, header=not file_exists)
-        return True
       
     def load_registry(self):
         """
@@ -111,16 +93,3 @@ class PersistenceManager:
         except Exception as e:
             print(f"[ERROR] Fallo en la carga del registro biométrico: {e}")
             return {}
-    
-    def get_already_marked_today(self, class_name):
-        """Devuelve un set con los códigos que ya marcaron asistencia hoy en esta clase."""
-        if not os.path.exists(self.log_path):
-            return set()
-        try:
-            df = pd.read_csv(self.log_path, dtype={'codigo_estudiante': str})
-            current_date = datetime.now().strftime('%Y-%m-%d')
-            # Filtramos los registros de hoy para la clase activa
-            mask = (df['clase_nombre'] == class_name) & (df['timestamp'].str.contains(current_date))
-            return set(df.loc[mask, 'codigo_estudiante'].unique())
-        except:
-            return set()

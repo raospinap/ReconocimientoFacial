@@ -22,7 +22,7 @@ def _clean_text(text):
     return ''.join(
         c for c in unicodedata.normalize('NFD', text)
         if unicodedata.category(c) != 'Mn'
-    ).replace('ñ', 'n').replace('Ñ', 'N')
+    ).replace('ñ', 'n').replace('Ñ', 'N').replace('á', 'a')
 
 # ==========================================================
 # PROCESO INDEPENDIENTE: MOTOR DE IA (SIDE-CAR)
@@ -45,8 +45,22 @@ def ai_camera_worker(mode, name, code, active_class_id, allowed_students, result
     last_capture_time = 0
     is_processing = False
     
+    # Carga de perfiles
     all_profiles = persistence.load_profiles()
+    # Memoria de sesión para evitar registros duplicados en el mismo encendido de cámara
+    already_marked = persistence.get_already_marked_today(active_class_id)
+    frame_counter = 0  # Contador de cuadros
+    skip_frames = 5    # PUNTO DULCE: Procesar cada 5 cuadros
 
+    # WARM-UP: Forzamos la carga de modelos en RAM antes de abrir la ventana
+    try:
+        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        DeepFace.represent(dummy_frame, model_name="ArcFace", detector_backend="mediapipe", enforce_detection=False)
+    except: pass
+    # Alrededor de la línea 60, antes del while
+    status_bar_msg = "ESPERANDO ROSTRO..."
+    status_bar_color = (255, 255, 255) # Blanco inicial
+    
     while not stop_event.is_set():
         ret, frame = cap.read()
         if not ret: break
@@ -142,48 +156,76 @@ def ai_camera_worker(mode, name, code, active_class_id, allowed_students, result
 
         # Lógica de Asistencia
         elif mode == "attendance":
-            cv2.putText(display_frame, f"ASISTENCIA: {active_class_id}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            curr_t = time.time()
-            if curr_t - last_capture_time > 2.0 and face_ready and light_ok:
-                last_capture_time = curr_t
-                try:
-                    res = DeepFace.represent(frame, model_name="ArcFace", detector_backend="mediapipe", enforce_detection=False)
-                    emb = np.array(res[0]["embedding"])
-                    best_dist, match_id, match_name = 0.0, None, None
+            # REQUERIMIENTO: Nombre de materia en NEGRO (esquina superior)
+            cv2.putText(display_frame, f"CLASE: {active_class_id}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+            
+            # Dibujar fondo para la barra de estado inferior (rectángulo negro opaco)
+            cv2.rectangle(display_frame, (0, h - 50), (w, h), (0, 0, 0), -1)
+
+            try:
+                faces = DeepFace.extract_faces(frame, detector_backend="mediapipe", enforce_detection=False)
+                
+                # Si no hay rostros, actualizamos el mensaje (opcional)
+                if not faces:
+                    status_bar_msg, status_bar_color = "CAMARA VACIA", (200, 200, 200)
+
+                for face_data in faces:
+                    facial_area = face_data["facial_area"]
+                    x, y, w_f, h_f = facial_area['x'], facial_area['y'], facial_area['w'], facial_area['h']
                     
-                    for uid, data in all_profiles.items():
-                        # CORRECCIÓN: Verificación explícita de None
-                        stored = data.get("vector")
-                        if stored is None:
-                            stored = data.get(b"vector")
-                            
-                        if stored is not None:
-                            search_list = np.array(stored)
-                            if search_list.ndim == 1: search_list = [search_list]
-                            for v in search_list:
-                                v_arr = np.array(v)
+                    # Dibujar cuadro SIEMPRE para feedback visual (muy bajo consumo)
+                    cv2.rectangle(display_frame, (x, y), (x + w_f, y + h_f), (0, 255, 0), 2)
+
+                    # RECONOCIMIENTO PESADO: Solo en el "Punto Dulce"
+                    if w_f > (w * 0.15) and frame_counter % skip_frames == 0:
+                        res = DeepFace.represent(frame[y:y+h_f, x:x+w_f], model_name="ArcFace", detector_backend="skip", enforce_detection=False)
+                        emb = np.array(res[0]["embedding"])
+                        best_dist, match_id, match_name = 0.0, None, None
+                        
+                        for uid, data in all_profiles.items():
+                            stored = data.get("vector") if data.get("vector") is not None else data.get(b"vector")
+                            if stored is not None:
+                                v_arr = np.array(stored)
+                                if v_arr.ndim > 1: v_arr = v_arr[0] # Usar primer vector del enrolamiento
                                 dist = np.dot(emb, v_arr) / (np.linalg.norm(emb) * np.linalg.norm(v_arr))
                                 if dist > 0.82 and dist > best_dist:
                                     best_dist, match_id, match_name = dist, uid, data.get("nombre")
-                    
-                    if match_id:
-                        is_allowed = str(match_id) in allowed_students
-                        txt = f"{_clean_text(match_name)}: {'OK' if is_allowed else 'NO INSCRITO'}"
-                        color_s = (0, 255, 0) if is_allowed else (0, 0, 255)
-                        if is_allowed:
-                            persistence.log_attendance({"id": match_id, "name": match_name, "class": active_class_id})
-                        
-                        cv2.rectangle(display_frame, (0, h-80), (w, h), (0,0,0), -1)
-                        cv2.putText(display_frame, txt, (20, h-30), cv2.FONT_HERSHEY_SIMPLEX, 1, color_s, 2)
-                        cv2.imshow(win_title, display_frame)
-                        cv2.waitKey(1500)
-                except: pass
+
+                        if match_id:
+                            clean_name = _clean_text(match_name)
+                            confianza_vip = round(float(best_dist), 2)
+                            if str(match_id) in already_marked:
+                                status_bar_msg = f"{clean_name} (Registrado)"
+                                status_bar_color = (255, 255, 0) # Cian
+                            elif str(match_id) in allowed_students:
+                                success = persistence.log_attendance({
+                                    "codigo": str(match_id), 
+                                    "nombre": match_name, 
+                                    "confianza": confianza_vip,
+                                    "clase": active_class_id
+                                })
+                                if success:
+                                    status_bar_msg = f"REGISTRADO: {clean_name}"
+                                    status_bar_color = (0, 255, 0) # Verde
+                                    already_marked.add(str(match_id))
+                                    print(f"[ASISTENCIA] {clean_name} - Confianza: {confianza_vip}")
+                            else:
+                                status_bar_msg = f"{clean_name}: NO MATRICULADO"
+                                status_bar_color = (0, 0, 255) # Rojo
+                        else:
+                            status_bar_msg = "ROSTRO NO REGISTRADO"
+                            status_bar_color = (0, 0, 255)
+                
+                # Renderizar el mensaje en la barra fija inferior
+                cv2.putText(display_frame, status_bar_msg, (20, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_bar_color, 2)
+                
+            except: pass
 
         cv2.imshow(win_title, display_frame)
         if key == 27:
             result_queue.put("CANCELLED")
             break
-
+        frame_counter += 1
     cap.release()
     cv2.destroyAllWindows()
 
@@ -228,9 +270,9 @@ class ReconApp(ctk.CTk):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         ctk.CTkLabel(self.sidebar, text="RECON-FACIAL", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
+        ctk.CTkButton(self.sidebar, text="Registrar Estudiante", command=self.show_enrollment).pack(pady=5, padx=20)
         ctk.CTkButton(self.sidebar, text="Dashboard", command=self.show_dashboard).pack(pady=5, padx=20)
         ctk.CTkButton(self.sidebar, text="Gestión de Clases", command=self.show_classes).pack(pady=5, padx=20)
-        ctk.CTkButton(self.sidebar, text="Registrar Estudiante", command=self.show_enrollment).pack(pady=5, padx=20)
         ctk.CTkButton(self.sidebar, text="Tomar Asistencia", command=self.show_live_attendance).pack(pady=5, padx=20)
         ctk.CTkButton(self.sidebar, text="Reportes", command=self.show_reports).pack(pady=5, padx=20)
         ctk.CTkButton(self.sidebar, text="Salir", fg_color="#e74c3c", command=self._on_closing).pack(pady=5, padx=20)
