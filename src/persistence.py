@@ -50,28 +50,28 @@ class PersistenceManager:
             return {}
             
     def log_attendance(self, student_data):
-        """Registra asistencia evitando duplicados para el mismo estudiante, clase y fecha."""
+        """Registra asistencia usando ID para integridad y Nombre para auditoría visual."""
         import pandas as pd
         from datetime import datetime
         
         file_exists = os.path.exists(self.log_path)
         current_date = datetime.now().strftime('%Y-%m-%d')
-        class_name = student_data.get('clase', 'Sin Clase')
+        
+        clase_id = student_data.get('clase_id', 'N/A')
+        clase_nombre = student_data.get('clase_nombre', 'Sin Nombre')
         student_id = str(student_data['codigo'])
 
         if file_exists:
             try:
-                # Forzamos la lectura del código como string para evitar errores de comparación
-                df_existing = pd.read_csv(self.log_path, dtype={'codigo_estudiante': str})
-                
-                # Validación de duplicado: mismo código, misma clase, misma fecha
-                duplicates = df_existing[
-                    (df_existing['codigo_estudiante'].astype(str) == student_id) & 
-                    (df_existing['clase_nombre'] == class_name) &
+                # Validamos duplicados usando el ID, que es inmutable
+                df_existing = pd.read_csv(self.log_path, dtype={'codigo_estudiante': str, 'clase_id': str})
+                mask = (
+                    (df_existing['codigo_estudiante'] == student_id) & 
+                    (df_existing['clase_id'] == clase_id) &
                     (df_existing['timestamp'].str.contains(current_date))
-                ]
-                if not duplicates.empty:
-                    return False # Ya existe registro hoy
+                )
+                if not df_existing[mask].empty:
+                    return False
             except: pass
 
         row = {
@@ -79,7 +79,8 @@ class PersistenceManager:
             'codigo_estudiante': student_id,
             'nombre': student_data['nombre'],
             'confianza_score': student_data['confianza'],
-            'clase_nombre': class_name, 
+            'clase_id': clase_id,        # El ancla técnica
+            'clase_nombre': clase_nombre, # El dato legible
             'sesion_id': student_data.get('session_id', current_date.replace("-",""))
         }
         
@@ -124,3 +125,23 @@ class PersistenceManager:
             return set(df.loc[mask, 'codigo_estudiante'].unique())
         except:
             return set()
+            
+    def log_admin_action(self, event_type, target_id, description):
+        """Registra una acción administrativa en el log de auditoría (ISO 25012)."""
+        import pandas as pd
+        from datetime import datetime
+        
+        audit_path = 'data/meta/admin_audit.csv'
+        os.makedirs(os.path.dirname(audit_path), exist_ok=True)
+        file_exists = os.path.exists(audit_path)
+        
+        row = {
+            'timestamp': datetime.now().isoformat(),
+            'admin_user': 'Admin_Local', # Identificador de sesión administrativa
+            'event_type': event_type,
+            'target_id': target_id,
+            'description': description
+        }
+        
+        df = pd.DataFrame([row])
+        df.to_csv(audit_path, mode='a', index=False, header=not file_exists)

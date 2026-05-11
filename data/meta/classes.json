@@ -1,1 +1,33 @@
-{"Aprendizaje Autom\u00e1tico": ["085400022023"], "Modelos de Conocimiento": ["085400022023"], "Elementos Financieros": [], "Ciencia, Sociedad y Desarrollo": [], "Rat\u00f3n m\u00e9dico": [], "Materia 3": []}
+{
+    "classes": {
+        "CLS-001": {
+            "name": "Materia 1",
+            "students": [],
+            "status": "active",
+            "created_at": "2026-05-11T15:15:33.698629"
+        },
+        "CLS-002": {
+            "name": "Materia 2",
+            "students": [
+                "085400022023"
+            ],
+            "status": "active",
+            "created_at": "2026-05-11T15:15:41.186346"
+        },
+        "CLS-003": {
+            "name": "Materile 3",
+            "students": [
+                "085400022023"
+            ],
+            "status": "active",
+            "created_at": "2026-05-11T15:20:18.493462"
+        },
+        "CLS-004": {
+            "name": "Materia 3",
+            "students": [],
+            "status": "hidden",
+            "created_at": "2026-05-11T16:05:06.696508",
+            "deactivated_at": "2026-05-11T16:07:53.189685"
+        }
+    }
+}

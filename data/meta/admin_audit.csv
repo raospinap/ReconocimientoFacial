@@ -1,0 +1,26 @@
+timestamp,admin_user,event_type,target_id,description
+2026-05-11T16:05:06.696508,Admin_Local,CREATE_CLASS,CLS-004,Creación de materia: Materia 3
+2026-05-11T16:07:53.189685,Admin_Local,DELETE_CLASS,CLS-004,Materia marcada como oculta (Soft Delete)
+2026-05-11T16:08:18.289096,Admin_Local,ENROLL_STUDENT,CLS-002,Estudiante 085400022023 matriculado en la clase
+2026-05-11T16:08:21.861324,Admin_Local,UNENROLL_STUDENT,CLS-002,Estudiante 085400022023 retirado de la clase
+2026-05-11T16:13:41.169795,Admin_Local,RECOVER_CLASS,CLS-003,Materia 'Materia 3' restaurada a estado activo via CLI
+2026-05-11T16:35:17.988068,Admin_Local,SESSION_END,CLS-003,Sesión de asistencia cerrada para: Materia 3
+2026-05-11T16:35:41.396538,Admin_Local,SESSION_START,CLS-002,Sesión de asistencia abierta para: Materia 2
+2026-05-11T16:35:45.793786,Admin_Local,SESSION_END,CLS-002,Sesión de asistencia cerrada para: Materia 2
+2026-05-11T16:37:08.987271,Admin_Local,RENAME_CLASS,CLS-003,Cambio de nombre: 'Materia 3' -> 'Materile 3'
+2026-05-11T16:53:18.713278,Admin_Local,SESSION_START,CLS-003,Sesión de asistencia abierta para: Materile 3
+2026-05-11T16:54:40.532904,Admin_Local,SESSION_END,CLS-003,Sesión de asistencia cerrada para: Materile 3
+2026-05-11T16:54:51.705356,Admin_Local,ENROLL_STUDENT,CLS-003,Estudiante 085400022023 matriculado en la clase
+2026-05-11T16:55:16.033401,Admin_Local,SESSION_START,CLS-003,Sesión de asistencia abierta para: Materile 3
+2026-05-11T16:57:02.548423,Admin_Local,SESSION_END,CLS-003,Sesión de asistencia cerrada para: Materile 3
+2026-05-11T16:57:05.656696,Admin_Local,SESSION_START,CLS-003,Sesión de asistencia abierta para: Materile 3
+2026-05-11T16:57:09.406446,Admin_Local,SESSION_END,CLS-003,Sesión de asistencia cerrada para: Materile 3
+2026-05-11T16:57:48.283629,Admin_Local,SESSION_START,CLS-002,Sesión de asistencia abierta para: Materia 2
+2026-05-11T16:57:51.289497,Admin_Local,SESSION_END,CLS-002,Sesión de asistencia cerrada para: Materia 2
+2026-05-11T16:58:01.278957,Admin_Local,ENROLL_STUDENT,CLS-002,Estudiante 085400022023 matriculado en la clase
+2026-05-11T16:58:14.750767,Admin_Local,SESSION_START,CLS-002,Sesión de asistencia abierta para: Materia 2
+2026-05-11T17:33:33.762374,Admin_Local,SESSION_END,CLS-002,Sesión de asistencia cerrada para: Materia 2
+2026-05-11T17:33:43.343926,Admin_Local,UNENROLL_STUDENT,CLS-001,Estudiante 085400022023 retirado de la clase
+2026-05-11T17:33:47.209828,Admin_Local,SESSION_START,CLS-001,Sesión de asistencia abierta para: Materia 1
+2026-05-11T17:34:20.538185,Admin_Local,SESSION_END,CLS-001,Sesión de asistencia cerrada para: Materia 1
+2026-05-11T17:34:28.167926,Admin_Local,SESSION_START,CLS-003,Sesión de asistencia abierta para: Materile 3
