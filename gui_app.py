@@ -243,7 +243,11 @@ class ReconApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Sistema Biométrico UT v1.0")
-        self.geometry("1100x700")
+        self.geometry("1100x700+0+0")
+        
+        self.update_idletasks()
+        
+        self.after(0, lambda: self.state('zoomed'))
         
         self.sidebar_buttons = []
         
@@ -301,7 +305,7 @@ class ReconApp(ctk.CTk):
         btn_profiles = ctk.CTkButton(self.sidebar, text="Perfiles Biométricos", command=self.show_profiles)
         btn_profiles.pack(pady=5, padx=20); self.sidebar_buttons.append(btn_profiles)
         
-        self.btn_audit = ctk.CTkButton(self.sidebar, text="Auditoría de Sistema", command=self.show_admin_audit)
+        self.btn_audit = ctk.CTkButton(self.sidebar, text="Sistema", command=self.show_admin_audit)
         self.btn_audit.pack(pady=5, padx=20); self.sidebar_buttons.append(self.btn_audit)
         
         ctk.CTkButton(self.sidebar, text="Salir", fg_color="#e74c3c", command=self._on_closing).pack(pady=5, padx=20)
@@ -1038,20 +1042,39 @@ class ReconApp(ctk.CTk):
 
     def show_admin_audit(self):
         """Muestra el historial de auditoría administrativa descifrado."""
+        # Recuperar logs descifrados
+        logs = self.persistence.get_admin_audit_logs()
+
         self._clear_view()
         
-        ctk.CTkLabel(self.main_view, text="REGISTRO DE AUDITORÍA (MÓDULO CIFRADO)", 
-                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
+        self.update_idletasks()
         
-        ctk.CTkLabel(self.main_view, text="Este registro es binario y está cifrado en disco. Solo es visible desde esta consola.",
-                     font=ctk.CTkFont(size=12), text_color="#7f8c8d").pack(pady=5)
+        ctk.CTkLabel(self.main_view, text="REGISTRO DE AUDITORÍA", 
+                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
 
+        f_keys = ctk.CTkFrame(self.main_view, fg_color="transparent")
+        f_keys.pack(pady=10)
+
+        ctk.CTkButton(
+            f_keys, 
+            text="Exportar Llave Secreta",
+            fg_color="#e67e22", 
+            hover_color="#d35400",
+            command=self._handle_key_backup
+        ).pack(side="left", padx=10)
+
+        ctk.CTkButton(
+            f_keys, 
+            text="Restaurar Llave Secreta",
+            fg_color="#27ae60", 
+            hover_color="#219150",
+            command=self._handle_key_restore
+        ).pack(side="left", padx=10)
+        
         scroll_frame = ctk.CTkScrollableFrame(self.main_view, fg_color="transparent")
         scroll_frame.pack(fill="both", expand=True, padx=40, pady=20)
 
-        # Recuperar logs descifrados
-        logs = self.persistence.get_admin_audit_logs()
-        
+        self.update()
         if not logs:
             ctk.CTkLabel(scroll_frame, text="No hay eventos registrados en la auditoría.").pack(pady=20)
             return
@@ -1071,6 +1094,54 @@ class ReconApp(ctk.CTk):
             # Descripción detallada
             ctk.CTkLabel(f_row, text=log['description'], wraplength=700, 
                          justify="left").pack(anchor="w", padx=25, pady=(0, 10))
+
+    def _handle_key_backup(self):
+        """Gestiona la exportación de la llave maestra cifrada."""
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".vault",
+            filetypes=[("Security Vault", "*.vault")],
+            title="Guardar respaldo de seguridad",
+            initialfile="backup_recon_facial.vault"
+        )
+        if not filepath: return
+
+        dialog = ctk.CTkInputDialog(text="Cree una contraseña para proteger este respaldo:", title="Cifrar Backup")
+        pw = dialog.get_input()
+        if not pw: return
+
+        try:
+            if self.security.export_key_backup(pw, filepath):
+                messagebox.showinfo("Éxito", "Respaldo generado correctamente.\nGuarde este archivo y la contraseña en un lugar seguro.")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo exportar la llave: {str(e)}")
+
+    def _handle_key_restore(self):
+        """Gestiona la restauración de la llave desde un archivo .vault."""
+        filepath = filedialog.askopenfilename(
+            filetypes=[("Security Vault", "*.vault")],
+            title="Seleccione el archivo de respaldo"
+        )
+        if not filepath: return
+
+        dialog = ctk.CTkInputDialog(text="Ingrese la contraseña de recuperación:", title="Descifrar Backup")
+        pw = dialog.get_input()
+        if not pw: return
+
+        confirm = messagebox.askyesno("Restauración Crítica", 
+            "Al restaurar una llave, se sobrescribirá la actual. "
+            "Si la llave no coincide con la base de datos actual, perderá el acceso a los perfiles registrados.\n\n"
+            "¿Desea continuar?")
+        
+        if not confirm: return
+
+        try:
+            if self.security.import_key_backup(pw, filepath):
+                messagebox.showinfo("Éxito", "Llave restaurada correctamente.\nEl sistema se reiniciará para aplicar los cambios.")
+                self._on_closing() # Cierra la app para forzar recarga con la nueva llave
+            else:
+                messagebox.showerror("Error", "Contraseña incorrecta o archivo de respaldo inválido.")
+        except Exception as e:
+            messagebox.showerror("Error Crítico", f"Fallo en la restauración: {str(e)}")
 
 if __name__ == "__main__": 
     multiprocessing.freeze_support() 
