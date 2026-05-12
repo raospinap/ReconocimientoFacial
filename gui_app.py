@@ -409,18 +409,62 @@ class ReconApp(ctk.CTk):
         self.ent_name = ctk.CTkEntry(self.main_view, placeholder_text="Nombre Completo", width=400); self.ent_name.pack(pady=5)
         self.ent_code = ctk.CTkEntry(self.main_view, placeholder_text="Código", width=400); self.ent_code.pack(pady=5)
         ctk.CTkButton(self.main_view, text="ABRIR CÁMARA DE REGISTRO", command=self._launch_enroll_worker).pack(pady=20)
+        ctk.CTkLabel(self.main_view, text="Aviso de Privacidad y Consentimiento Informado", 
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(pady=(15, 5))
+
+        consent_text = (
+            "De conformidad con la Ley 1581 de 2012, se informa que este sistema constituye un prototipo de "
+            "proyecto académico de la carrera de Ingeniería de Sistemas y su finalidad es exclusivamente el "
+            "control de asistencia estudiantil. Para tal fin, se requiere el tratamiento de datos biométricos "
+            "sensibles (características faciales), los cuales son transformados de forma inmediata en un vector "
+            "numérico cifrado, eliminando la fotografía original de la memoria de forma automática sin "
+            "almacenarla en disco duro, garantizando así la privacidad del usuario. Como titular de la información, "
+            "usted tiene derecho a conocer, actualizar o solicitar la supresión de sus datos en cualquier momento; "
+            "asimismo, al tratarse de datos sensibles, se le informa que su autorización es facultativa, pero "
+            "necesaria para el registro en este entorno de aprendizaje. Al continuar con el proceso y solicitar "
+            "la apertura de la cámara, usted manifiesta su consentimiento previo, expreso e informado para que "
+            "sus rasgos faciales sean procesados bajo los términos éticos y legales aquí descritos para fines "
+            "estrictamente académicos."
+        )
+
+        privacy_box = ctk.CTkTextbox(
+            self.main_view, 
+            width=550,             
+            height=300, 
+            corner_radius=10, 
+            border_width=1,
+            wrap="word",           
+            font=ctk.CTkFont(size=12),
+            spacing1=10,           
+            spacing2=5,            
+            spacing3=10            
+        )
+        privacy_box.insert("0.0", consent_text)
+        privacy_box.configure(state="disabled", padx=15, pady=15) 
+        privacy_box.pack(pady=10, padx=40)
+        
+        
         self.enroll_status = ctk.CTkLabel(self.main_view, text="")
         self.enroll_status.pack(pady=10)
 
     def _launch_enroll_worker(self):
         n, c = self.ent_name.get().strip(), self.ent_code.get().strip()
-        if not n or not c: return
+        if not n or not c: 
+            messagebox.showwarning("Datos Incompletos", "Debe ingresar nombre y código.")
+            return
+        confirm = messagebox.askyesno(
+            "Confirmación de Seguridad", 
+            "¿Ha leído el aviso de privacidad y autoriza de manera voluntaria el tratamiento de su dato biométrico para este proyecto académico?"
+        )
+        if not confirm:
+            messagebox.showinfo("Proceso Cancelado", "No se ha realizado el registro al no contar con la autorización del titular.")
+            return
         self.enroll_status.configure(text="Iniciando cámara...", text_color="#3498db")
         self.stop_event.clear()
         self._set_sidebar_state("disabled")
         self.worker_process = multiprocessing.Process(
             target=ai_camera_worker, 
-            args=("enroll", n, c, None, None, self.result_queue, self.stop_event)
+            args=("enroll", n, c, None, None, None, self.result_queue, self.stop_event)
         )
         self.worker_process.start()
         self._listen_for_result()
