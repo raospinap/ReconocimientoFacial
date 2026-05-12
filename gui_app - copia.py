@@ -19,7 +19,7 @@ from PIL import Image
 from deepface import DeepFace 
 from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 
 def _clean_text(text):
     """Elimina tildes y eñes para compatibilidad con OpenCV."""
@@ -32,7 +32,7 @@ def _clean_text(text):
 # ==========================================================
 # PROCESO INDEPENDIENTE: MOTOR DE IA (SIDE-CAR)
 # ==========================================================
-def ai_camera_worker(mode, name, code, active_class_id, allowed_students, result_queue, stop_event):
+def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allowed_students, result_queue, stop_event):
     """
     Motor de IA con manejo explícito de None para NumPy y color de texto corregido.
     """
@@ -162,7 +162,7 @@ def ai_camera_worker(mode, name, code, active_class_id, allowed_students, result
         # Lógica de Asistencia
         elif mode == "attendance":
             # REQUERIMIENTO: Nombre de materia en NEGRO (esquina superior)
-            cv2.putText(display_frame, f"CLASE: {active_class_id}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+            cv2.putText(display_frame, f"CLASE: {active_class_name}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
             
             # Dibujar fondo para la barra de estado inferior (rectángulo negro opaco)
             cv2.rectangle(display_frame, (0, h - 50), (w, h), (0, 0, 0), -1)
@@ -207,7 +207,8 @@ def ai_camera_worker(mode, name, code, active_class_id, allowed_students, result
                                     "codigo": str(match_id), 
                                     "nombre": match_name, 
                                     "confianza": confianza_vip,
-                                    "clase": active_class_id
+                                    "clase_id": active_class_id,  
+                                    "clase_nombre": active_class_name
                                 })
                                 if success:
                                     status_bar_msg = f"REGISTRADO: {clean_name}"
@@ -246,6 +247,8 @@ class ReconApp(ctk.CTk):
         
         self.sidebar_buttons = []
         
+        self.console_logs = []
+        
         self.result_queue = multiprocessing.Queue()
         self.stop_event = multiprocessing.Event()
         self.worker_process = None
@@ -259,8 +262,6 @@ class ReconApp(ctk.CTk):
         
         self._setup_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
-        
-        
 
     def _load_active_session(self):
         if os.path.exists(self.active_session_file):
@@ -296,13 +297,71 @@ class ReconApp(ctk.CTk):
         
         btn_repo = ctk.CTkButton(self.sidebar, text="Reportes", command=self.show_reports)
         btn_repo.pack(pady=5, padx=20); self.sidebar_buttons.append(btn_repo)
+
+        btn_profiles = ctk.CTkButton(self.sidebar, text="Perfiles Biométricos", command=self.show_profiles)
+        btn_profiles.pack(pady=5, padx=20); self.sidebar_buttons.append(btn_profiles)
         
         ctk.CTkButton(self.sidebar, text="Salir", fg_color="#e74c3c", command=self._on_closing).pack(pady=5, padx=20)
 
     def show_dashboard(self):
         self._clear_view()
-        status = f"Sesión Activa: {self.current_session['clase']}" if self.current_session else "No hay clase activa"
-        ctk.CTkLabel(self.main_view, text=f"PANEL DE CONTROL\n\n{status}", font=ctk.CTkFont(size=24)).pack(expand=True)
+        
+        # Obtener datos de telemetría
+        telemetry = self.persistence.get_system_telemetry()
+        
+        # Título y Estado de Sesión
+        ctk.CTkLabel(self.main_view, text="DASHBOARD DE OPERACIONES", 
+                     font=ctk.CTkFont(size=22, weight="bold")).pack(pady=(20, 10))
+        
+        status_color = "#2ecc71" if self.current_session else "#95a5a6"
+        status_text = f"Sesión Activa: {self.current_session['clase']}" if self.current_session else "Sin Sesión Activa"
+        
+        ctk.CTkLabel(self.main_view, text=status_text, text_color=status_color,
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
+
+        # --- CONTENEDOR DE TARJETAS (TELEMETRÍA) ---
+        cards_frame = ctk.CTkFrame(self.main_view, fg_color="transparent")
+        cards_frame.pack(fill="both", expand=True, padx=40, pady=20)
+        cards_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        # Tarjeta 1: Base de Datos Biométrica
+        self._create_telemetry_card(cards_frame, 0, "BIOMETRÍA", [
+            (f"Rostros: {telemetry['biometria']['rostros_registrados']}", None),
+            (f"Peso: {telemetry['biometria']['peso_base_datos']}", None)
+        ])
+
+        # Tarjeta 2: Almacenamiento y Logs
+        self._create_telemetry_card(cards_frame, 1, "PERSISTENCIA", [
+            (f"Log Asistencia: {telemetry['logs']['asistencia']}", None),
+            (f"Log Auditoría: {telemetry['logs']['auditoria']}", None)
+        ])
+
+        # Tarjeta 3: Integridad de Sistema (ISO 25012)
+        integ = telemetry['integridad']
+        self._create_telemetry_card(cards_frame, 2, "ESTADO CRÍTICO", [
+            ("Registros Binarios", "OK" if integ['registry_ok'] else "ERROR"),
+            ("Estructura Clases", "OK" if integ['classes_ok'] else "ERROR"),
+            ("Historial Logs", "OK" if integ['logs_ok'] else "ERROR")
+        ])
+
+        # --- CONSOLA DE EVENTOS EN TIEMPO REAL ---
+        ctk.CTkLabel(self.main_view, text="REGISTRO DE EVENTOS (LIVE)", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(10, 5))
+        
+        self.console_box = ctk.CTkTextbox(self.main_view, height=150, width=800, 
+                                          font=("Consolas", 12))
+        self.console_box.pack(pady=10, padx=40)
+        
+        # Cargar historial existente
+        for log in self.console_logs:
+            self.console_box.insert("end", log + "\n")
+        self.console_box.see("end") # Auto-scroll al final
+        self.console_box.configure(state="disabled") # Solo lectura
+
+        # Botón de cierre de sesión si existe una activa
+        if self.current_session:
+            ctk.CTkButton(self.main_view, text="Cerrar Sesión Actual", fg_color="#e67e22",
+                         command=self._close_class_logic).pack(pady=20) 
 
     def show_classes(self):
         self._clear_view()
@@ -395,13 +454,50 @@ class ReconApp(ctk.CTk):
     def show_live_attendance(self):
         self._clear_view()
         if not self.current_session: return
-        with open(self.classes_path, "r", encoding='utf-8') as f: data = json.load(f)
-        allowed = [str(s) for s in data.get(self.current_session['clase'], [])]
+        
+        # Cargamos los estudiantes permitidos navegando por la nueva estructura de IDs
+        allowed = []
+        if os.path.exists(self.classes_path):
+            with open(self.classes_path, "r", encoding='utf-8') as f:
+                data = json.load(f)
+                # Obtenemos el ID de la sesión actual (ej: CLS-001)
+                cid = self.current_session.get("class_id")
+                # Acceso correcto según ISO 25012: classes -> ID -> students
+                allowed = data.get("classes", {}).get(cid, {}).get("students", [])
+
+        # Título de la materia y feedback visual para el usuario
+        ctk.CTkLabel(self.main_view, text=f"ASISTENCIA: {self.current_session['clase']}", 
+                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
+        
+        self.lbl_last_reg = ctk.CTkLabel(self.main_view, text="Esperando registros...", 
+                                         font=ctk.CTkFont(size=16, weight="bold"))
+        self.lbl_last_reg.pack(pady=20)
+
         self._set_sidebar_state("disabled")
         self.stop_event.clear()
+        
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            messagebox.showerror("Error de Hardware", "La cámara no está disponible.\nVerifique que no esté siendo usada por otra aplicación.")
+            self._log_to_console("ERROR: Cámara no disponible o ocupada.")
+            self.show_dashboard()
+            return
+        cap.release() # Soltamos rápido para que el worker pueda tomarla
+
+        self._log_to_console(f"Iniciando captura para: {self.current_session['clase']}")
+        
         self.worker_process = multiprocessing.Process(
             target=ai_camera_worker, 
-            args=("attendance", None, None, self.current_session['clase'], allowed, self.result_queue, self.stop_event)
+            args=(
+                "attendance", 
+                None, 
+                None, 
+                self.current_session['class_id'],
+                self.current_session['clase'],   
+                allowed, 
+                self.result_queue, 
+                self.stop_event
+            )
         )
         self.worker_process.start()
         self._listen_for_result()
@@ -486,7 +582,103 @@ class ReconApp(ctk.CTk):
         self.new_class_entry.delete(0, 'end')
         self.show_classes()
 
-    def show_reports(self): self._clear_view(); ctk.CTkLabel(self.main_view, text="REPORTES").pack(pady=20)
+    def show_reports(self):
+        self._clear_view()
+        
+        # Título
+        ctk.CTkLabel(self.main_view, text="MÓDULO DE REPORTES", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
+
+        # --- BARRA DE FILTROS ---
+        filter_frame = ctk.CTkFrame(self.main_view)
+        filter_frame.pack(fill="x", padx=20, pady=5)
+
+        # Filtro de Materia
+        ctk.CTkLabel(filter_frame, text="Materia:").grid(row=0, column=0, padx=10, pady=10)
+        
+        # Cargamos las materias disponibles para el dropdown
+        class_options = ["Todas"]
+        if os.path.exists(self.classes_path):
+            with open(self.classes_path, "r", encoding='utf-8') as f:
+                c_data = json.load(f).get("classes", {})
+                class_options += [f"{cid} | {info['name']}" for cid, info in c_data.items()]
+
+        self.report_class_var = ctk.StringVar(value="Todas")
+        self.combo_class = ctk.CTkComboBox(filter_frame, values=class_options, variable=self.report_class_var, width=250)
+        self.combo_class.grid(row=0, column=1, padx=10, pady=10)
+
+        # Filtro de Fecha (Simple: YYYY-MM-DD)
+        ctk.CTkLabel(filter_frame, text="Fecha (AAAA-MM-DD):").grid(row=0, column=2, padx=10, pady=10)
+        self.date_filter_entry = ctk.CTkEntry(filter_frame, placeholder_text="Ej: 2026-05-11")
+        self.date_filter_entry.grid(row=0, column=3, padx=10, pady=10)
+
+        # Botón de Generar
+        ctk.CTkButton(filter_frame, text="Filtrar Reporte", command=self._generate_report_logic).grid(row=0, column=4, padx=20, pady=10)
+        ctk.CTkButton(filter_frame, text="Exportar Excel", fg_color="#27ae60", hover_color="#1e8449", 
+                     command=self._export_report_to_excel).grid(row=0, column=5, padx=10, pady=10)
+
+        # --- CABECERA DE TABLA ---
+        header_frame = ctk.CTkFrame(self.main_view, fg_color="#2c3e50", height=30)
+        header_frame.pack(fill="x", padx=20, pady=(10, 0))
+        
+        headers = ["Fecha / Hora", "Código", "Nombre", "Materia", "Conf."]
+        widths = [180, 120, 200, 180, 60]
+        
+        for i, text in enumerate(headers):
+            lbl = ctk.CTkLabel(header_frame, text=text, text_color="white", width=widths[i], font=ctk.CTkFont(weight="bold"))
+            lbl.pack(side="left", padx=5)
+
+        # --- CONTENEDOR SCROLLABLE ---
+        self.report_scroll = ctk.CTkScrollableFrame(self.main_view, fg_color="transparent")
+        self.report_scroll.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        # Carga inicial (Hoy)
+        self.date_filter_entry.insert(0, datetime.datetime.now().strftime('%Y-%m-%d'))
+        self._generate_report_logic()
+        
+    def _generate_report_logic(self):
+        # Limpiar tabla anterior
+        for widget in self.report_scroll.winfo_children():
+            widget.destroy()
+
+        df = self.persistence.get_attendance_data()
+        if df.empty:
+            ctk.CTkLabel(self.report_scroll, text="No hay registros de asistencia disponibles.").pack(pady=20)
+            return
+
+        # Aplicar Filtro de Fecha
+        date_query = self.date_filter_entry.get().strip()
+        if date_query:
+            df = df[df['timestamp'].str.contains(date_query)]
+
+        # Aplicar Filtro de Materia
+        class_query = self.report_class_var.get()
+        if class_query != "Todas":
+            cid = class_query.split(" | ")[0]
+            df = df[df['clase_id'] == cid]
+
+        # Renderizar filas
+        if df.empty:
+            ctk.CTkLabel(self.report_scroll, text="No se encontraron registros para los filtros seleccionados.").pack(pady=20)
+            return
+
+        # Ordenar por el más reciente
+        df = df.sort_values(by='timestamp', ascending=False)
+        widths = [180, 120, 200, 180, 60]
+
+        for _, row in df.iterrows():
+            f_row = ctk.CTkFrame(self.report_scroll, fg_color="transparent")
+            f_row.pack(fill="x", pady=1)
+            
+            # Formatear timestamp para legibilidad corta
+            ts = row['timestamp'].split('.')[0].replace('T', ' ')
+            
+            data_cols = [ts, row['codigo_estudiante'], row['nombre'], row['clase_nombre'], f"{row['confianza_score']:.2f}"]
+            
+            for i, val in enumerate(data_cols):
+                ctk.CTkLabel(f_row, text=val, width=widths[i], anchor="w").pack(side="left", padx=5)
+            
+            # Separador sutil
+            ctk.CTkFrame(self.report_scroll, height=1, fg_color="#34495e").pack(fill="x", padx=5)
 
     def _on_closing(self):
         self.stop_event.set()
@@ -637,7 +829,135 @@ class ReconApp(ctk.CTk):
                     json.dump(self.current_session, f)
             
             self.show_classes()    
+
+    def _export_report_to_excel(self):
+        """Exporta el reporte filtrado a un archivo Excel (.xlsx)."""
+        df = self.persistence.get_attendance_data()
+        
+        if df.empty:
+            messagebox.showwarning("Exportar", "No hay datos para exportar.")
+            return
+
+        # 1. Aplicar los mismos filtros de la vista
+        date_query = self.date_filter_entry.get().strip()
+        if date_query:
+            df = df[df['timestamp'].str.contains(date_query)]
+
+        class_query = self.report_class_var.get()
+        if class_query != "Todas":
+            cid = class_query.split(" | ")[0]
+            df = df[df['clase_id'] == cid]
+
+        if df.empty:
+            messagebox.showwarning("Exportar", "Los filtros actuales no devuelven registros.")
+            return
+
+        # 2. Solicitar ubicación de guardado
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx")],
+            initialfile=f"Reporte_Asistencia_{datetime.datetime.now().strftime('%Y%m%d')}"
+        )
+
+        if filename:
+            try:
+                # Ordenar cronológicamente antes de exportar
+                df = df.sort_values(by='timestamp', ascending=True)
                 
+                # Exportación limpia (ISO 25012: mantenemos IDs como texto)
+                df.to_excel(filename, index=False, engine='openpyxl')
+                
+                messagebox.showinfo("Éxito", f"Reporte exportado correctamente en:\n{filename}")
+                
+                # Log administrativo de la exportación
+                self.persistence.log_admin_action(
+                    event_type="EXPORT_REPORT",
+                    target_id="SYSTEM",
+                    description=f"Exportación de reporte Excel: {os.path.basename(filename)}"
+                )
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+
+    def show_profiles(self):
+        """Muestra la lista de rostros registrados en el sistema."""
+        self._clear_view()
+        
+        ctk.CTkLabel(self.main_view, text="GESTIÓN DE PERFILES BIOMÉTRICOS", 
+                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
+
+        # Contenedor de tabla
+        header_frame = ctk.CTkFrame(self.main_view, fg_color="#2c3e50", height=30)
+        header_frame.pack(fill="x", padx=40, pady=(10, 0))
+        
+        headers = ["Código Estudiante", "Nombre Completo", "Acciones"]
+        widths = [150, 300, 100]
+        
+        for i, text in enumerate(headers):
+            ctk.CTkLabel(header_frame, text=text, text_color="white", 
+                         width=widths[i], font=ctk.CTkFont(weight="bold")).pack(side="left", padx=10)
+
+        scroll_frame = ctk.CTkScrollableFrame(self.main_view, fg_color="transparent")
+        scroll_frame.pack(fill="both", expand=True, padx=40, pady=(0, 20))
+
+        profiles = self.persistence.load_profiles()
+        
+        if not profiles:
+            ctk.CTkLabel(scroll_frame, text="No hay perfiles registrados.").pack(pady=20)
+            return
+
+        for code, info in profiles.items():
+            row = ctk.CTkFrame(scroll_frame, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            
+            ctk.CTkLabel(row, text=code, width=150, anchor="w").pack(side="left", padx=10)
+            ctk.CTkLabel(row, text=info.get('nombre', 'N/A'), width=300, anchor="w").pack(side="left", padx=10)
+            
+            # Botón de eliminación con confirmación
+            ctk.CTkButton(row, text="Eliminar", fg_color="#c0392b", hover_color="#962d22", width=80,
+                         command=lambda c=code, n=info.get('nombre'): self._delete_profile_logic(c, n)).pack(side="right", padx=10)
+            
+            ctk.CTkFrame(scroll_frame, height=1, fg_color="#34495e").pack(fill="x")
+
+    def _delete_profile_logic(self, code, name):
+        """Ejecuta la eliminación del perfil con confirmación y auditoría."""
+        msg = f"¿Está seguro de eliminar el perfil de {name} ({code})?\nEsta acción no se puede deshacer."
+        if not messagebox.askyesno("Confirmar Eliminación", msg):
+            return
+
+        if self.persistence.delete_profile(code):
+            # Auditoría ISO 25012
+            self.persistence.log_admin_action(
+                event_type="DELETE_PROFILE",
+                target_id=code,
+                description=f"Perfil biométrico de {name} eliminado permanentemente."
+            )
+            messagebox.showinfo("Éxito", f"Perfil de {name} eliminado.")
+            self.show_profiles()
+        else:
+            messagebox.showerror("Error", "No se pudo eliminar el perfil.")
+
+    def _create_telemetry_card(self, parent, col, title, items):
+        card = ctk.CTkFrame(parent, border_width=2, border_color="#34495e")
+        card.grid(row=0, column=col, padx=10, sticky="nsew")
+        
+        ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=14, weight="bold"), 
+                     text_color="#3498db").pack(pady=10)
+        
+        for text, status in items:
+            color = "white"
+            if status == "OK": color = "#2ecc71"
+            elif status == "ERROR": color = "#e74c3c"
+            
+            label_text = f"{text} {f'[{status}]' if status else ''}"
+            ctk.CTkLabel(card, text=label_text, text_color=color).pack(pady=2)
+
+    def _log_to_console(self, message):
+        """Añade un mensaje al historial con timestamp."""
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        formatted_msg = f"[{timestamp}] {message}"
+        self.console_logs.append(formatted_msg)
+        # Mantener solo los últimos 50 mensajes para no saturar RAM
+        if len(self.console_logs) > 50: self.console_logs.pop(0)
 
 if __name__ == "__main__": 
     multiprocessing.freeze_support() 
