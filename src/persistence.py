@@ -7,6 +7,7 @@ import pandas as pd
 import hmac
 import hashlib
 from datetime import datetime
+import numpy as np
 
 # Soporte para vectores de NumPy (Esencial para DeepFace)
 m.patch()
@@ -41,13 +42,27 @@ class PersistenceManager:
             return {}
 
     def save_profiles(self, profiles_dict):
+        # Convertir todos los vectores de NumPy a listas antes de serializar
+        serializable_profiles = {}
+        for uid, data in profiles_dict.items():
+            # Convertimos el array de NumPy a lista para evitar errores de serialización
+            vector_lista = data["vector"].tolist() if isinstance(data["vector"], np.ndarray) else data["vector"]
+            serializable_profiles[str(uid)] = {
+                "nombre": data["nombre"],
+                "vector": vector_lista,
+                "fecha_registro": data["fecha_registro"]
+            }
+        
         try:
-            packed_data = msgpack.packb(profiles_dict, use_bin_type=True)
+            #packed_data = msgpack.packb(profiles_dict, use_bin_type=True)
+            packed_data = msgpack.packb(serializable_profiles)
             encrypted_data = self.sm.encrypt_data(packed_data)
             with open(self.profiles_path, 'wb') as f:
                 f.write(encrypted_data)
+            return True    
         except Exception as e:
             print(f"[ERROR PERSISTENCE] No se pudo guardar biometría: {e}")
+            return False
 
     def delete_profile(self, student_code):
         profiles = self.load_profiles()
@@ -89,16 +104,16 @@ class PersistenceManager:
             return pd.DataFrame()
 
     def log_attendance(self, student_data):
-        file_exists = os.path.exists(self.log_path)
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        
-        # Validación de duplicados
-        df_old = self.get_attendance_data()
-        if not df_old.empty:
-            mask = ((df_old['codigo_estudiante'] == str(student_data['codigo'])) & 
-                    (df_old['clase_id'] == str(student_data['clase_id'])) &
-                    (df_old['timestamp'].str.contains(current_date)))
-            if not df_old[mask].empty: return False
+        # Verificación rápida solo si el archivo ya existe y no está vacío
+        if os.path.exists(self.log_path) and os.path.getsize(self.log_path) > 0:
+            try:
+                df = pd.read_csv(self.log_path, usecols=['codigo_estudiante', 'clase_id', 'timestamp'])
+                current_date = datetime.now().strftime('%Y-%m-%d')
+                mask = (df['codigo_estudiante'] == str(student_data['codigo'])) & \
+                       (df['clase_id'] == str(student_data['clase_id'])) & \
+                       (df['timestamp'].str.contains(current_date))
+                if mask.any(): return False  # Ya existe hoy en esta clase
+            except Exception: pass # Si falla la lectura, continúa (seguridad ante corrupciones menores)
 
         row = {
             'timestamp': datetime.now().isoformat(),
@@ -107,12 +122,12 @@ class PersistenceManager:
             'confianza_score': student_data['confianza'],
             'clase_id': str(student_data['clase_id']),
             'clase_nombre': student_data.get('clase_nombre', 'N/A'),
-            'sesion_id': student_data.get('session_id', current_date.replace("-",""))
+            'sesion_id': student_data.get('session_id', datetime.now().strftime('%Y-%m-%d'))
         }
         row['signature'] = self._generate_signature(row)
         
         df = pd.DataFrame([row])
-        df.to_csv(self.log_path, mode='a', index=False, header=not file_exists)
+        df.to_csv(self.log_path, mode='a', index=False, header=not os.path.exists(self.log_path))
         return True
 
     # --- AUDITORÍA (CONFIDENCIALIDAD) ---
