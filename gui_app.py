@@ -1,240 +1,30 @@
+#.\src\ai_engine.py
+
 import os
-# # Silencia logs de TensorFlow (0 = todos, 1 = sin INFO, 2 = sin WARNING, 3 = ERROR solamente)
+# Silencia logs de TensorFlow
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#import tensorflow as tf
+#tf.get_logger().setLevel('ERROR')
 
-import tensorflow as tf
-# Deshabilita advertencias de deprecación internas
-tf.get_logger().setLevel('ERROR')
 
 import customtkinter as ctk
 import json
-import unicodedata
 import datetime
 import cv2
-import numpy as np
 import time
-import multiprocessing 
-from PIL import Image
-from deepface import DeepFace 
+import pandas as pd
+import multiprocessing
+
 from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
+from src.ai_engine import ai_camera_worker
 from tkinter import messagebox, filedialog
 
-def _clean_text(text):
-    """Elimina tildes y eñes para compatibilidad con OpenCV."""
-    if not text: return ""
-    return ''.join(
-        c for c in unicodedata.normalize('NFD', text)
-        if unicodedata.category(c) != 'Mn'
-    ).replace('ñ', 'n').replace('Ñ', 'N').replace('á', 'a')
+# Silencia advertencias de Tkinter y otros
+#import warnings
+#warnings.filterwarnings("ignore")
 
-# ==========================================================
-# PROCESO INDEPENDIENTE: MOTOR DE IA (SIDE-CAR)
-# ==========================================================
-def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allowed_students, result_queue, stop_event):
-    """
-    Motor de IA con manejo explícito de None para NumPy y color de texto corregido.
-    """
-    security = SecurityManager()
-    persistence = PersistenceManager(security)
-    cap = cv2.VideoCapture(0)
-    
-    # Calibración inicial
-    for _ in range(5): cap.read()
-
-    enroll_vectors = []
-    enroll_stage = 0
-    stages_text = ["Mire al frente", "Gire a la izquierda", "Gire a la derecha"]
-    win_title = "REGISTRO BIOMETRICO" if mode == "enroll" else "CONTROL DE ASISTENCIA"
-    last_capture_time = 0
-    is_processing = False
-    
-    # Carga de perfiles
-    all_profiles = persistence.load_profiles()
-    # Memoria de sesión para evitar registros duplicados en el mismo encendido de cámara
-    already_marked = persistence.get_already_marked_today(active_class_id)
-    frame_counter = 0  # Contador de cuadros
-    skip_frames = 5    # PUNTO DULCE: Procesar cada 5 cuadros
-
-    # WARM-UP: Forzamos la carga de modelos en RAM antes de abrir la ventana
-    try:
-        dummy_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        DeepFace.represent(dummy_frame, model_name="ArcFace", detector_backend="mediapipe", enforce_detection=False)
-    except: pass
-    # Alrededor de la línea 60, antes del while
-    status_bar_msg = "ESPERANDO ROSTRO..."
-    status_bar_color = (255, 255, 255) # Blanco inicial
-    
-    while not stop_event.is_set():
-        ret, frame = cap.read()
-        if not ret: break
-        
-        display_frame = frame.copy()
-        h, w = frame.shape[:2]
-        
-        # Evento de teclado único
-        key = cv2.waitKey(1) & 0xFF
-        
-        # Análisis de Calidad
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        brightness = gray.mean()
-        sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
-        
-        light_ok = brightness > 65 
-        sharp_ok = sharpness > 35
-
-        face_ready = False
-        try:
-            faces = DeepFace.extract_faces(frame, detector_backend="mediapipe", enforce_detection=True)
-            if faces and faces[0]["facial_area"]['w'] > (w * 0.20):
-                face_ready = True
-        except: pass
-
-        # UI y Colores
-        if not light_ok:
-            status_color = (0, 165, 255)
-            cv2.putText(display_frame, "ADVERTENCIA: POCA LUZ", (20, h-60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
-        elif not sharp_ok:
-            status_color = (0, 165, 255)
-            cv2.putText(display_frame, "ADVERTENCIA: ENFOQUE POBRE", (20, h-60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
-        else:
-            status_color = (0, 255, 0) if face_ready else (0, 0, 255)
-
-        cv2.ellipse(display_frame, (w//2, h//2), (int(w*0.22), int(h*0.35)), 0, 0, 360, status_color, 2)
-
-        # Lógica de Enrolamiento
-        if mode == "enroll":
-            if enroll_stage < 3:
-                # REQUERIMIENTO: Texto en color NEGRO (0, 0, 0) para contraste
-                txt_stage = f"ETAPA {enroll_stage+1}/3: {stages_text[enroll_stage]}"
-                cv2.putText(display_frame, txt_stage, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-                
-                if light_ok and sharp_ok and face_ready:
-                    cv2.putText(display_frame, "[PRESIONE ESPACIO PARA CAPTURAR]", (w//2 - 180, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-                    
-                    if key == ord(' ') and not is_processing:
-                        is_processing = True
-                        try:
-                            res = DeepFace.represent(frame, model_name="ArcFace", detector_backend="mediapipe", enforce_detection=True)
-                            emb = np.array(res[0]["embedding"])
-                            
-                            duplicate = False
-                            if enroll_stage == 0:
-                                for uid, data in all_profiles.items():
-                                    # CORRECCIÓN: Verificación explícita de None para evitar error de ambigüedad
-                                    stored = data.get("vector")
-                                    if stored is None:
-                                        stored = data.get(b"vector")
-                                    
-                                    if stored is not None:
-                                        search_list = np.array(stored)
-                                        if search_list.ndim == 1: search_list = [search_list]
-                                        for v in search_list:
-                                            v_arr = np.array(v)
-                                            dist = np.dot(emb, v_arr) / (np.linalg.norm(emb) * np.linalg.norm(v_arr))
-                                            if dist > 0.70:
-                                                duplicate = True; break
-                                    if duplicate: break
-                            
-                            if duplicate:
-                                result_queue.put("DUPLICATE")
-                                break 
-                            else:
-                                enroll_vectors.append(emb)
-                                enroll_stage += 1
-                        except Exception as e:
-                            print(f"Error técnico en represent: {e}")
-                        is_processing = False
-                else:
-                    msg = "ACERQUESE O MEJORE LUZ" if not face_ready else "ESTABILICE LA CAMARA"
-                    cv2.putText(display_frame, msg, (20, h-20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-            else:
-                all_profiles[code] = {
-                    "nombre": name,
-                    "vector": np.array(enroll_vectors, dtype=np.float32),
-                    "fecha_registro": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%S")
-                }
-                persistence.save_profiles(all_profiles)
-                result_queue.put("SUCCESS")
-                break
-
-        # Lógica de Asistencia
-        elif mode == "attendance":
-            # REQUERIMIENTO: Nombre de materia en NEGRO (esquina superior)
-            cv2.putText(display_frame, f"CLASE: {active_class_name}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-            
-            # Dibujar fondo para la barra de estado inferior (rectángulo negro opaco)
-            cv2.rectangle(display_frame, (0, h - 50), (w, h), (0, 0, 0), -1)
-
-            try:
-                faces = DeepFace.extract_faces(frame, detector_backend="mediapipe", enforce_detection=False)
-                
-                # Si no hay rostros, actualizamos el mensaje (opcional)
-                if not faces:
-                    status_bar_msg, status_bar_color = "CAMARA VACIA", (200, 200, 200)
-
-                for face_data in faces:
-                    facial_area = face_data["facial_area"]
-                    x, y, w_f, h_f = facial_area['x'], facial_area['y'], facial_area['w'], facial_area['h']
-                    
-                    # Dibujar cuadro SIEMPRE para feedback visual (muy bajo consumo)
-                    cv2.rectangle(display_frame, (x, y), (x + w_f, y + h_f), (0, 255, 0), 2)
-
-                    # RECONOCIMIENTO PESADO: Solo en el "Punto Dulce"
-                    if w_f > (w * 0.15) and frame_counter % skip_frames == 0:
-                        res = DeepFace.represent(frame[y:y+h_f, x:x+w_f], model_name="ArcFace", detector_backend="skip", enforce_detection=False)
-                        emb = np.array(res[0]["embedding"])
-                        best_dist, match_id, match_name = 0.0, None, None
-                        
-                        for uid, data in all_profiles.items():
-                            stored = data.get("vector") if data.get("vector") is not None else data.get(b"vector")
-                            if stored is not None:
-                                v_arr = np.array(stored)
-                                if v_arr.ndim > 1: v_arr = v_arr[0] # Usar primer vector del enrolamiento
-                                dist = np.dot(emb, v_arr) / (np.linalg.norm(emb) * np.linalg.norm(v_arr))
-                                if dist > 0.82 and dist > best_dist:
-                                    best_dist, match_id, match_name = dist, uid, data.get("nombre")
-
-                        if match_id:
-                            clean_name = _clean_text(match_name)
-                            confianza_vip = round(float(best_dist), 2)
-                            if str(match_id) in already_marked:
-                                status_bar_msg = f"{clean_name} (Registrado)"
-                                status_bar_color = (255, 255, 0) # Cian
-                            elif str(match_id) in allowed_students:
-                                success = persistence.log_attendance({
-                                    "codigo": str(match_id), 
-                                    "nombre": match_name, 
-                                    "confianza": confianza_vip,
-                                    "clase_id": active_class_id,  
-                                    "clase_nombre": active_class_name
-                                })
-                                if success:
-                                    status_bar_msg = f"REGISTRADO: {clean_name}"
-                                    status_bar_color = (0, 255, 0) # Verde
-                                    already_marked.add(str(match_id))
-                                    print(f"[ASISTENCIA] {clean_name} - Confianza: {confianza_vip}")
-                            else:
-                                status_bar_msg = f"{clean_name}: NO MATRICULADO"
-                                status_bar_color = (0, 0, 255) # Rojo
-                        else:
-                            status_bar_msg = "ROSTRO NO REGISTRADO"
-                            status_bar_color = (0, 0, 255)
-                
-                # Renderizar el mensaje en la barra fija inferior
-                cv2.putText(display_frame, status_bar_msg, (20, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_bar_color, 2)
-                
-            except: pass
-
-        cv2.imshow(win_title, display_frame)
-        # Detecta Cierre por Tecla ESC o por el botón [X] del mouse
-        if key == 27 or cv2.getWindowProperty(win_title, cv2.WND_PROP_VISIBLE) < 1:
-            result_queue.put("CANCELLED")
-            break
-        frame_counter += 1
-    cap.release()
-    cv2.destroyAllWindows()
 
 # ==========================================================
 # GUI ADMINISTRATIVA
@@ -284,7 +74,7 @@ class ReconApp(ctk.CTk):
     def _create_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
-        ctk.CTkLabel(self.sidebar, text="RECON-FACIAL", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
+        ctk.CTkLabel(self.sidebar, text="MENÚ", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
         
         # Guardamos cada botón en la lista self.sidebar_buttons
         btn_dash = ctk.CTkButton(self.sidebar, text="Dashboard", command=self.show_dashboard)
@@ -317,11 +107,11 @@ class ReconApp(ctk.CTk):
         telemetry = self.persistence.get_system_telemetry()
         
         # Título y Estado de Sesión
-        ctk.CTkLabel(self.main_view, text="DASHBOARD DE OPERACIONES", 
+        ctk.CTkLabel(self.main_view, text="DASHBOARD", 
                      font=ctk.CTkFont(size=22, weight="bold")).pack(pady=(20, 10))
         
         status_color = "#2ecc71" if self.current_session else "#95a5a6"
-        status_text = f"Sesión Activa: {self.current_session['clase']}" if self.current_session else "Sin Sesión Activa"
+        status_text = f"Clase Activa para Asistencia: {self.current_session['clase']}" if self.current_session else "No hay ninguna clase Activa"
         
         ctk.CTkLabel(self.main_view, text=status_text, text_color=status_color,
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
@@ -352,7 +142,7 @@ class ReconApp(ctk.CTk):
         ])
 
         # --- CONSOLA DE EVENTOS EN TIEMPO REAL ---
-        ctk.CTkLabel(self.main_view, text="REGISTRO DE EVENTOS (LIVE)", 
+        ctk.CTkLabel(self.main_view, text="REGISTRO DE EVENTOS", 
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(10, 5))
         
         self.console_box = ctk.CTkTextbox(self.main_view, height=150, width=800, 
@@ -367,18 +157,18 @@ class ReconApp(ctk.CTk):
 
         # Botón de cierre de sesión si existe una activa
         if self.current_session:
-            ctk.CTkButton(self.main_view, text="Cerrar Sesión Actual", fg_color="#e67e22",
+            ctk.CTkButton(self.main_view, text="Desactivar Clase Actual", fg_color="#e67e22",
                          command=self._close_class_logic).pack(pady=20) 
 
     def show_classes(self):
         self._clear_view()
-        ctk.CTkLabel(self.main_view, text="ADMINISTRACIÓN DE ASIGNATURAS", font=ctk.CTkFont(size=22)).pack(pady=20)
+        ctk.CTkLabel(self.main_view, text="ADMINISTRACIÓN DE CLASES", font=ctk.CTkFont(size=22)).pack(pady=20)
         f = ctk.CTkFrame(self.main_view); f.pack(fill="x", padx=40, pady=10)
         self.new_class_entry = ctk.CTkEntry(f, placeholder_text="Nombre de la materia"); self.new_class_entry.pack(side="left", padx=20, expand=True, fill="x")
         ctk.CTkButton(f, text="Añadir", command=self._create_new_class_logic).pack(side="right", padx=20)
         s_frame = ctk.CTkFrame(self.main_view); s_frame.pack(fill="both", expand=True, padx=40, pady=20)
         if self.current_session:
-            ctk.CTkButton(s_frame, text="FINALIZAR SESIÓN", fg_color="#e74c3c", command=self._close_class_logic).pack(pady=10)
+            ctk.CTkButton(s_frame, text="Desactivar Clase Actual", fg_color="#e74c3c", command=self._close_class_logic).pack(pady=10)
         else:
             if os.path.exists(self.classes_path):
                 with open(self.classes_path, "r", encoding='utf-8') as f:
@@ -452,10 +242,18 @@ class ReconApp(ctk.CTk):
         self.enroll_status.pack(pady=10)
 
     def _launch_enroll_worker(self):
-        n, c = self.ent_name.get().strip(), self.ent_code.get().strip()
+        n = self.ent_name.get().strip()
+        c = self.ent_code.get().strip()
         if not n or not c: 
             messagebox.showwarning("Datos Incompletos", "Debe ingresar nombre y código.")
             return
+        
+        # --- VALIDACIÓN PREVIA DE ID 
+        all_profiles = self.persistence.load_profiles()
+        if str(c) in all_profiles:
+            messagebox.showerror("ID Duplicado", f"El código {c} ya está registrado a nombre de: {all_profiles[str(c)]['nombre']}")
+            return
+        
         confirm = messagebox.askyesno(
             "Confirmación de Seguridad", 
             "¿Ha leído el aviso de privacidad y autoriza de manera voluntaria el tratamiento de su dato biométrico para este proyecto académico?"
@@ -491,36 +289,54 @@ class ReconApp(ctk.CTk):
                     msg = f"Asistencia: {res['nombre']} ({res['codigo']})"
                     if hasattr(self, 'lbl_last_reg'):
                         self.lbl_last_reg.configure(text=f"✅ {msg}", text_color="#2ecc71")
-                    self._log_to_console(msg) # [NUEVO]
+                    self._log_to_console(msg)
                 
                 elif res.get('status') == 'not_enrolled':
                     msg = f"No Matriculado: {res['nombre']}"
                     if hasattr(self, 'lbl_last_reg'):
                         self.lbl_last_reg.configure(text=f"⚠️ {msg}", text_color="#e67e22")
-                    self._log_to_console(f"ALERTA: {msg}") # [NUEVO]
+                    self._log_to_console(f"ALERTA: {msg}")
 
             # Casos de cierre de proceso
             elif res in ["SUCCESS", "DUPLICATE", "CANCELLED"]:
                 if res == "SUCCESS":
                     if hasattr(self, 'enroll_status'):
                         self.enroll_status.configure(text="✅ PROCESO COMPLETADO", text_color="#2ecc71")
-                    self._log_to_console("Sistema: Proceso finalizado correctamente.") # [NUEVO]
+                        self._log_to_console("Sistema: Proceso finalizado correctamente.")
+                elif res == "DUPLICATE":
+                    if hasattr(self, 'enroll_status'):
+                        self.enroll_status.configure(text="⚠️ REGISTRO DUPLICADO", text_color="#f1c40f")
+                        self._log_to_console("Sistema: Registro duplicado.")
                 elif res == "CANCELLED":
                     if hasattr(self, 'enroll_status'):
                         self.enroll_status.configure(text="⚠️ CÁMARA CERRADA", text_color="#f1c40f")
-                    self._log_to_console("Sistema: Cámara cerrada por el usuario.") # [NUEVO]
+                        self._log_to_console("Sistema: Cámara cerrada por el usuario.")
                 
+                if hasattr(self, 'ent_code'):
+                    self.ent_code.delete(0, 'end')
+                if hasattr(self, 'ent_name'):
+                    self.ent_name.delete(0, 'end')
+                    
                 self._set_sidebar_state("normal")
-                
+                self.stop_event.set()
         except:
             if self.worker_process and self.worker_process.is_alive():
-                self.after(500, self._listen_for_result)
+                self.after(100, self._listen_for_result)
             else:
                 self._set_sidebar_state("normal")
 
     def show_live_attendance(self):
         self._clear_view()
-        if not self.current_session: return
+        if not self.current_session: 
+            messagebox.showwarning(
+            "Sesión Inactiva", 
+            "No hay una clase activa.\n\n"
+            "1. Vaya a 'Gestión de Clases'\n"
+            "2. Seleccione una materia y haga clic en el botón de la clase\n"
+            "3. Intente tomar asistencia nuevamente."
+            )
+            self._log_to_console("ERROR: Intento de asistencia sin clase activa.")
+            return
         
         # Cargamos los estudiantes permitidos navegando por la nueva estructura de IDs
         allowed = []
@@ -1044,56 +860,121 @@ class ReconApp(ctk.CTk):
         """Muestra el historial de auditoría administrativa descifrado."""
         # Recuperar logs descifrados
         logs = self.persistence.get_admin_audit_logs()
-
         self._clear_view()
-        
         self.update_idletasks()
         
         ctk.CTkLabel(self.main_view, text="REGISTRO DE AUDITORÍA", 
-                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(pady=5)
 
         f_keys = ctk.CTkFrame(self.main_view, fg_color="transparent")
-        f_keys.pack(pady=10)
+        f_keys.pack(pady=5)
 
         ctk.CTkButton(
             f_keys, 
-            text="Exportar Llave Secreta",
+            text="Exportar Llave",
             fg_color="#e67e22", 
             hover_color="#d35400",
-            command=self._handle_key_backup
-        ).pack(side="left", padx=10)
+            command=self._handle_key_backup,
+            width=120,
+            height=25
+        ).pack(side="left", padx=5)
 
         ctk.CTkButton(
             f_keys, 
-            text="Restaurar Llave Secreta",
+            text="Restaurar Llave",
             fg_color="#27ae60", 
             hover_color="#219150",
-            command=self._handle_key_restore
-        ).pack(side="left", padx=10)
+            command=self._handle_key_restore,
+            width=120,
+            height=25
+        ).pack(side="left", padx=5)
         
+        ctk.CTkButton(f_keys, text="Exportar Auditoría", fg_color="#3498db", hover_color="#2980b9",
+                  command=self._export_audit_to_excel, width=160, height=25).pack(side="left", padx=5)
+        
+        # Frame compacto para la tabla
         scroll_frame = ctk.CTkScrollableFrame(self.main_view, fg_color="transparent")
-        scroll_frame.pack(fill="both", expand=True, padx=40, pady=20)
+        scroll_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         self.update()
         if not logs:
-            ctk.CTkLabel(scroll_frame, text="No hay eventos registrados en la auditoría.").pack(pady=20)
+            ctk.CTkLabel(scroll_frame, text="No hay eventos registrados", 
+                         font=ctk.CTkFont(size=11)).pack(pady=10)
             return
 
-        # Mostramos del más reciente al más antiguo (Reverse)
-        for log in reversed(logs):
-            f_row = ctk.CTkFrame(scroll_frame, border_width=1, border_color="#34495e")
-            f_row.pack(fill="x", pady=5, padx=10)
+        # Encabezados
+        header_frame = ctk.CTkFrame(scroll_frame, fg_color="#2c3e50", height=25)
+        header_frame.pack(fill="x", pady=(0, 2))
+        
+        headers = ["Fecha/Hora", "Evento", "Objeto", "Descripción"]
+        widths = [130, 140, 100, 450]
+        
+        for i, text in enumerate(headers):
+            ctk.CTkLabel(header_frame, text=text, text_color="white", 
+                         width=widths[i], font=ctk.CTkFont(size=10, weight="bold"),
+                         anchor="w").pack(side="left", padx=3)
+
+        # Mostramos los 30 últimos logs,  del más reciente al más antiguo (Reverse)
+        display_logs = logs[-30:]
+        for log in reversed(display_logs):
+            f_row = ctk.CTkFrame(scroll_frame, border_width=0, 
+                                 fg_color="transparent")
+            f_row.pack(fill="x", pady=0)
             
-            # Formateo de encabezado
+            # Formateo compacto en una sola línea
             ts = log['timestamp'].split('.')[0].replace('T', ' ')
-            header_text = f"🕒 {ts} | 📂 EVENTO: {log['event_type']} | 🎯 OBJETO: {log['target_id']}"
+            event_type = log['event_type']
+            target_id = log['target_id']
+            description = log['description'][:80] + "..." if len(log['description']) > 80 else log['description']
             
-            ctk.CTkLabel(f_row, text=header_text, font=ctk.CTkFont(weight="bold"), 
-                         text_color="#3498db").pack(anchor="w", padx=15, pady=(10, 2))
+            # Columna 1: Timestamp
+            ctk.CTkLabel(f_row, text=ts, width=widths[0], 
+                         font=ctk.CTkFont(size=10), anchor="w",
+                         text_color="#bdc3c7").pack(side="left", padx=3)
             
-            # Descripción detallada
-            ctk.CTkLabel(f_row, text=log['description'], wraplength=700, 
-                         justify="left").pack(anchor="w", padx=25, pady=(0, 10))
+            # Columna 2: Evento (con color según tipo)
+            event_color = "#3498db" if "CREATE" in event_type or "ENROLL" in event_type else \
+                          "#e74c3c" if "DELETE" in event_type else \
+                          "#f39c12" if "SESSION" in event_type else "#95a5a6"
+            
+            ctk.CTkLabel(f_row, text=event_type, width=widths[1], 
+                         font=ctk.CTkFont(size=10, weight="bold"), anchor="w",
+                         text_color=event_color).pack(side="left", padx=3)
+            
+            # Columna 3: Objeto
+            ctk.CTkLabel(f_row, text=target_id, width=widths[2], 
+                         font=ctk.CTkFont(size=10), anchor="w",
+                         text_color="#ecf0f1").pack(side="left", padx=3)
+            
+            # Columna 4: Descripción
+            ctk.CTkLabel(f_row, text=description, width=widths[3], 
+                         font=ctk.CTkFont(size=10), anchor="w",
+                         text_color="#95a5a6").pack(side="left", padx=3)
+
+    def _export_audit_to_excel(self):
+        """Exporta TODOS los logs de auditoría a Excel sin filtros."""
+        logs = self.persistence.get_admin_audit_logs()
+        if not logs:
+            messagebox.showwarning("Exportar", "No hay registros de auditoría para exportar.")
+            return
+
+        # Estandarización: Siempre trabajamos con DataFrame
+        df = pd.DataFrame(logs)
+        df = df.sort_values(by='timestamp', ascending=False)
+        
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx")],
+            initialfile=f"Auditoria_Sistema_{datetime.datetime.now().strftime('%Y%m%d')}"
+        )
+        if filename:
+            try:
+                # Un solo punto de exportación
+                df.to_excel(filename, index=False, engine='openpyxl')
+                messagebox.showinfo("Éxito", f"Auditoría completa exportada a:\n{filename}")
+                self.persistence.log_admin_action("EXPORT_AUDIT", "SYSTEM", f"Exportación completa del log de auditoría")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo exportar el archivo: {e}")
 
     def _handle_key_backup(self):
         """Gestiona la exportación de la llave maestra cifrada."""
@@ -1146,3 +1027,4 @@ class ReconApp(ctk.CTk):
 if __name__ == "__main__": 
     multiprocessing.freeze_support() 
     app = ReconApp(); app.mainloop()
+    
