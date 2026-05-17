@@ -16,6 +16,23 @@ import multiprocessing
 from deepface import DeepFace
 from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
+import psutil, time, datetime
+
+# CONFIGURACIÓN CENTRALIZADA (Externalizada)
+CONFIG = {
+    "brightness_min": 75,
+    "brightness_max": 230,
+    "sharpness_min": 45,
+    "face_size_ratio": 0.11,
+    "skip_frames": 5,
+    "enroll_dup_threshold": 0.70,
+    "attendance_match_threshold": 0.75,
+    "cooldown_sec": 6,
+    "debug_mode": False
+}
+
+DEBUG_MODE = CONFIG["debug_mode"]
+
 
 def _clean_text(text):
     """Elimina tildes y eñes para compatibilidad con OpenCV."""
@@ -55,9 +72,10 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
     # Memoria de sesión para evitar registros duplicados
     already_marked = persistence.get_already_marked_today(active_class_id)
     session_cooldown = {} 
-    COOLDOWN_SEC = 8  
+    COOLDOWN_SEC = CONFIG["cooldown_sec"]  
     frame_counter = 0  
-    skip_frames = 5    
+    skip_frames = CONFIG["skip_frames"]    
+    last_time = time.time()
 
     # WARM-UP
     try:
@@ -80,18 +98,21 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
         brightness = gray.mean()
         sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
         
-        light_ok = brightness > 90 
-        sharp_ok = sharpness > 55
+        light_ok = CONFIG["brightness_min"] < brightness < CONFIG["brightness_max"]
+        sharp_ok = sharpness > CONFIG["sharpness_min"]
 
         face_ready = False
         try:
             faces = DeepFace.extract_faces(frame, detector_backend="mediapipe", enforce_detection=True)
-            if faces and faces[0]["facial_area"]['w'] > (w * 0.12):
+            if faces and faces[0]["facial_area"]['w'] > (w * CONFIG["face_size_ratio"]):
                 face_ready = True
         except Exception as e:
             if "Face could not be detected" not in str(e):
                 print(f"[ERROR CRÍTICO DETECCIÓN] {e}")
 
+        if DEBUG_MODE:
+            print(f"[FRAME {frame_counter}] Luz:{brightness:.1f} | Enfoque:{sharpness:.1f} | Rostros:{len(faces) if 'faces' in locals() else 0} | Skip:{frame_counter % CONFIG['skip_frames']}")
+        
         if not light_ok:
             status_color = (0, 165, 255)
             cv2.putText(display_frame, "ADVERTENCIA: POCA LUZ", (20, h-60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
@@ -134,7 +155,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                                             v_arr = np.array(v)
                                             dist = np.dot(emb, v_arr) / (np.linalg.norm(emb) * np.linalg.norm(v_arr))
                                             print(f"[DEBUG] Comparando con {uid}: Similitud = {dist:.4f}")
-                                            if dist > 0.80: # Umbral anti-duplicados
+                                            if dist > CONFIG["enroll_dup_threshold"]: # Umbral anti-duplicados
                                                 print(f"!!! POSIBLE DUPLICADO DETECTADO: {dist:.4f}")
                                                 duplicate = True; break
                                     if duplicate: break
@@ -168,7 +189,6 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                 break
 
         # --- LÓGICA DE ASISTENCIA ---
-        #RF-07 (Unicidad): Lógica de Cooldown temporal (8s).
         #Previene que el mismo rostro sea reconocido como 'nuevo' por micro-movimientos.
         
         elif mode == "attendance":
@@ -186,7 +206,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                     
                     cv2.rectangle(display_frame, (x, y), (x + w_f, y + h_f), (0, 255, 0), 2)
 
-                    if w_f > (w * 0.12) and frame_counter % skip_frames == 0:
+                    if w_f > (w * CONFIG["face_size_ratio"]) and frame_counter % CONFIG["skip_frames"] == 0:
                         res = DeepFace.represent(frame[y:y+h_f, x:x+w_f], model_name="ArcFace", detector_backend="skip", enforce_detection=False)
                         emb = np.array(res[0]["embedding"])
                         best_dist, match_id, match_name = 0.0, None, None
@@ -199,11 +219,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                                 for v_vec in vectors_to_check:
                                     v_vec_arr = np.array(v_vec)
                                     dist = np.dot(emb, v_vec_arr) / (np.linalg.norm(emb) * np.linalg.norm(v_vec_arr))
-                                    
-                                    if dist > 0.85:
-                                        print(f"[DEBUG] Posible coincidencia: {data.get('nombre')} (ID: {uid}) - Dist: {dist:.4f}")
-                                    
-                                    if dist > 0.75 and dist > best_dist: # Umbral de asistencia
+                                    if dist > CONFIG["attendance_match_threshold"] and dist > best_dist: # Umbral de asistencia
                                         best_dist, match_id, match_name = dist, uid, data.get("nombre")
                         
                         if match_id:
@@ -212,7 +228,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                             now = time.time()
                             last_log = session_cooldown.get(match_id, 0)
 
-                            if str(match_id) in already_marked or (now - last_log < COOLDOWN_SEC):
+                            if str(match_id) in already_marked or (now - last_log < CONFIG["cooldown_sec"]):
                                 status_bar_msg = f"{clean_name} (Ya registrado - Cooldown)"
                                 status_bar_color = (255, 255, 0)
                             elif str(match_id) in allowed_students:
@@ -246,6 +262,17 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
         if key == 27 or cv2.getWindowProperty(win_title, cv2.WND_PROP_VISIBLE) < 1:
             result_queue.put("CANCELLED")
             break
+
+        # === LOG DE RENDIMIENTO POR FRAME (Activar solo en pruebas) ===
+        if CONFIG["debug_mode"] and frame_counter % 10 == 0:
+            now = time.time()
+            delta = now - last_time
+            fps = 10 / delta if delta > 0 else 0  # Corregido: mide FPS real cada 10 frames
+            cpu = psutil.cpu_percent(interval=0.01)
+            ram_mb = psutil.virtual_memory().used / 1024 / 1024
+            print(f"[PERF] CPU:{cpu:.1f}% | RAM:{ram_mb:.0f}MB | FPS_REAL:{fps:.1f}")
+            last_time = now
         frame_counter += 1
+        
     cap.release()
     cv2.destroyAllWindows()
