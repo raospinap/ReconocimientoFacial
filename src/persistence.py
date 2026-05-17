@@ -1,4 +1,9 @@
 # src/persistence.py
+"""Capa de persistencia local que orquesta la escritura/lectura de datos biométricos y administrativos. 
+Implementa serialización binaria (Msgpack) cifrada con AES-256
+Garantiza la integridad de los registros de asistencia mediante firmas HMAC-SHA256 y mantiene logs de auditoría inmutables.
+Su diseño append-only y sus validaciones en memoria cumplen con la optimización de espacio y la trazabilidad exigida por ISO 25012.
+"""
 
 import msgpack
 import msgpack_numpy as m
@@ -9,7 +14,7 @@ import hashlib
 from datetime import datetime
 import numpy as np
 
-# Soporte para vectores de NumPy (Esencial para DeepFace)
+
 m.patch()
 
 class PersistenceManager:
@@ -18,6 +23,8 @@ class PersistenceManager:
     """
     
     def __init__(self, security_manager):
+        """Inicializa rutas de archivos, instancia el gestor criptográfico y asegura la creación de directorios (data/).
+        RNF-06, RNF-07"""
         self.sm = security_manager
         # Definición explícita de rutas
         self.profiles_path = 'data/profiles/encrypted_registry.bin'
@@ -30,6 +37,8 @@ class PersistenceManager:
 
     # --- PERFILES BIOMÉTRICOS ---
     def load_profiles(self):
+        """Descifra y deserializa el registro biométrico desde encrypted_registry.bin, manejando excepciones sin crashear la UI.
+        RF-01, RNF-04, RNF-05 """
         if not os.path.exists(self.profiles_path): return {}
         try:
             with open(self.profiles_path, 'rb') as f:
@@ -42,6 +51,8 @@ class PersistenceManager:
             return {}
 
     def save_profiles(self, profiles_dict):
+        """Serializa vectores a listas nativas, empaqueta con Msgpack y persiste el blob cifrado en disco.
+        RF-01, RF-04, RNF-04, RNF-05 """
         # Convertir todos los vectores de NumPy a listas antes de serializar
         serializable_profiles = {}
         for uid, data in profiles_dict.items():
@@ -65,6 +76,8 @@ class PersistenceManager:
             return False
 
     def delete_profile(self, student_code):
+        """Elimina un perfil biométrico del diccionario en memoria y reescribe el archivo cifrado actualizado.
+        RF-01, RNF-05, RNF-09 """
         profiles = self.load_profiles()
         if student_code in profiles:
             del profiles[student_code]
@@ -74,12 +87,14 @@ class PersistenceManager:
 
     # --- ASISTENCIA (INTEGRIDAD) ---
     def _generate_signature(self, row_dict):
-        """Sella la fila para detectar manipulaciones externas."""
+        """Genera sello HMAC-SHA256 sobre campos críticos (timestamp, codigo, clase_id) para detectar manipulación externa.
+        ISO 25012, RNF-05 (Integridad)"""
         payload = f"{row_dict['timestamp']}|{row_dict['codigo_estudiante']}|{row_dict['clase_id']}"
         return hmac.new(self.sm.key, payload.encode(), hashlib.sha256).hexdigest()
 
     def get_attendance_data(self):
-        """Carga el reporte. Si el archivo está vacío o es viejo, lo maneja sin crashear."""
+        """Carga master_log.csv, verifica firmas HMAC por fila y marca integrity_ok=False en registros alterados.
+        RF-08, ISO 25012, RNF-06"""
         if not os.path.exists(self.log_path) or os.path.getsize(self.log_path) == 0:
             return pd.DataFrame()
         try:
@@ -104,6 +119,8 @@ class PersistenceManager:
             return pd.DataFrame()
 
     def log_attendance(self, student_data):
+        """Consulta duplicados diarios en memoria, genera firma HMAC y añade fila al CSV en modo append-only.
+        RF-06, RF-07, RNF-04 """
         # Verificación rápida solo si el archivo ya existe y no está vacío
         if os.path.exists(self.log_path) and os.path.getsize(self.log_path) > 0:
             try:
@@ -132,6 +149,8 @@ class PersistenceManager:
 
     # --- AUDITORÍA (CONFIDENCIALIDAD) ---
     def log_admin_action(self, event_type, target_id, description):
+        """Descifra el historial de auditoría, añade la nueva acción administrativa y vuelve a cifrar/persistir admin_audit.bin.
+        RNF-05, RNF-06, RNF-09 """
         audit_data = self.get_admin_audit_logs()
         new_entry = {
             'timestamp': datetime.now().isoformat(),
@@ -150,6 +169,8 @@ class PersistenceManager:
             print(f"[ERROR PERSISTENCE] Fallo en log administrativo: {e}")
 
     def get_admin_audit_logs(self):
+        """Lee y descifra el contenedor binario de auditoría, retornando la lista de eventos para renderizado en GUI.
+        RNF-05, RNF-06 """
         if not os.path.exists(self.audit_path): return []
         try:
             with open(self.audit_path, 'rb') as f:
@@ -161,6 +182,8 @@ class PersistenceManager:
 
     # --- TELEMETRÍA ---
     def get_system_telemetry(self):
+        """Calcula pesos de archivos y verifica existencia de estructuras críticas para el Dashboard de estado.
+        RNF-04, RNF-06 """
         def get_size(path):
             return f"{os.path.getsize(path)/1024:.1f} KB" if os.path.exists(path) else "0 B"
 
@@ -176,7 +199,8 @@ class PersistenceManager:
         }
         
     def get_already_marked_today(self, active_class_id):
-        """Retorna un conjunto de códigos de estudiantes que ya asistieron hoy."""
+        """Filtra master_log.csv por fecha y clase activa, retornando un set de códigos para evitar registros duplicados en sesión.
+        RF-07, RNF-03"""
         df = self.get_attendance_data()
         if df.empty: return set()
         

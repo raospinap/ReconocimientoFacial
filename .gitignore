@@ -1,13 +1,19 @@
-# Entorno Virtual
+# --- Entorno Python ---
 venv/
 __pycache__/
 *.pyc
+.env
 
-# Datos Sensibles y Biométricos (Seguridad y Privacidad)[cite: 1]
-data/security/secret.key
-data/profiles/encrypted_registry.bin
-data/attendance/master_log.csv
+# --- Datos Sensibles y Locales ---
+data/
+*.key
+*.bin
 
-# Archivos de sistema
+# --- Herramientas de Desarrollo Local ---
+recover_class.py
+
+# --- Sistema y Docs ---
 .DS_Store
 Thumbs.db
+docs/build/
+docs/_build/

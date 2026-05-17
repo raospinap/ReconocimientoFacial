@@ -1,4 +1,12 @@
-#.\src\ai_engine.py
+#.\gui_app.py
+
+"""
+MÓDULO: Interfaz Gráfica y Orquestación
+DESCRIPCIÓN: Controlador principal basado en CustomTkinter. Gestiona el ciclo de vida 
+de la aplicación, navegación entre vistas y comunicación asíncrona con el motor de IA 
+mediante multiprocessing.Queue para evitar bloqueos en la UI.
+CUMPLIMIENTO: RNF-01 (Interfaz Intuitiva), RNF-06 (Estandarización)
+"""
 
 import os
 # Silencia logs de TensorFlow
@@ -6,7 +14,6 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 #import tensorflow as tf
 #tf.get_logger().setLevel('ERROR')
-
 
 import customtkinter as ctk
 import json
@@ -30,7 +37,10 @@ from tkinter import messagebox, filedialog
 # GUI ADMINISTRATIVA
 # ==========================================================
 class ReconApp(ctk.CTk):
+    """Controlador principal de la aplicación. 
+    Mantiene el estado de sesión, gestión de workers y cola de resultados en memoria."""
     def __init__(self):
+        """	Inicializa la ventana principal, configura el estado de sesión, instancia gestores de seguridad/persistencia y prepara los objetos de comunicación entre procesos. RNF-01, RNF-06, RNF-07"""
         super().__init__()
         self.title("Sistema Biométrico UT v1.0")
         self.geometry("1100x700+0+0")
@@ -58,12 +68,16 @@ class ReconApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _load_active_session(self):
+        """Recupera y deserializa el estado de la última clase activa desde active_session.json para mantener continuidad tras reinicios.
+        RF-10, RNF-01 """
         if os.path.exists(self.active_session_file):
             with open(self.active_session_file, "r", encoding='utf-8') as f:
                 return json.load(f)
         return None
 
     def _setup_ui(self):
+        """Configura el layout principal de la aplicación, distribuyendo la barra lateral y el área de visualización dinámica.
+        RNF-01, RNF-06 """
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
         self._create_sidebar()
@@ -72,6 +86,8 @@ class ReconApp(ctk.CTk):
         self.show_dashboard()
 
     def _create_sidebar(self):
+        """Genera el menú de navegación lateral con botones para acceder a cada módulo funcional del sistema.
+        RNF-01, RNF-06 """
         self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         ctk.CTkLabel(self.sidebar, text="MENÚ", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
@@ -101,6 +117,8 @@ class ReconApp(ctk.CTk):
         ctk.CTkButton(self.sidebar, text="Salir", fg_color="#e74c3c", command=self._on_closing).pack(pady=5, padx=20)
 
     def show_dashboard(self):
+        """Renderiza la vista principal con telemetría (rostros, peso de BD, integridad), estado de sesión y consola de eventos en tiempo real.
+        RF-09, RF-10, RNF-01, RNF-04 """
         self._clear_view()
         
         # Obtener datos de telemetría
@@ -161,6 +179,8 @@ class ReconApp(ctk.CTk):
                          command=self._close_class_logic).pack(pady=20) 
 
     def show_classes(self):
+        """Muestra la interfaz de administración de asignaturas: creación, activación, matriculación, renombrado y eliminación lógica.
+        RF-01, RF-10, RNF-01, RNF-09 """
         self._clear_view()
         ctk.CTkLabel(self.main_view, text="ADMINISTRACIÓN DE CLASES", font=ctk.CTkFont(size=22)).pack(pady=20)
         f = ctk.CTkFrame(self.main_view); f.pack(fill="x", padx=40, pady=10)
@@ -198,6 +218,7 @@ class ReconApp(ctk.CTk):
                                      command=lambda c=cid: self._delete_class_logic(c)).pack(side="right", padx=5)
 
     def show_enrollment(self):
+        """Presenta el formulario de registro de estudiantes, incluyendo campos de datos y el aviso legal de consentimiento informado (Ley 1581). RF-01, RNF-08, RNF-09 """
         self._clear_view()
         ctk.CTkLabel(self.main_view, text="REGISTRO DE ESTUDIANTE", font=ctk.CTkFont(size=22)).pack(pady=10)
         self.ent_name = ctk.CTkEntry(self.main_view, placeholder_text="Nombre Completo", width=400); self.ent_name.pack(pady=5)
@@ -242,6 +263,8 @@ class ReconApp(ctk.CTk):
         self.enroll_status.pack(pady=10)
 
     def _launch_enroll_worker(self):
+        """Valida datos, verifica consentimiento, confirma unicidad de código y lanza el proceso hijo de IA en modo registro.
+        RF-01, RF-07, RNF-08, RNF-09 """
         n = self.ent_name.get().strip()
         c = self.ent_code.get().strip()
         if not n or not c: 
@@ -272,6 +295,8 @@ class ReconApp(ctk.CTk):
         self._listen_for_result()
 
     def _listen_for_result(self):
+        """Sondea asíncronamente la cola de resultados del worker para actualizar la UI, limpiar campos y liberar recursos.
+        RNF-03, RNF-06"""
         try:
             res = self.result_queue.get_nowait()
             
@@ -326,6 +351,7 @@ class ReconApp(ctk.CTk):
                 self._set_sidebar_state("normal")
 
     def show_live_attendance(self):
+        """Verifica sesión activa, carga lista blanca de matriculados, valida hardware y lanza el worker en modo asistencia con feedback inmediato. RF-02, RF-05, RF-07, RNF-01, RNF-03"""
         self._clear_view()
         if not self.current_session: 
             messagebox.showwarning(
@@ -386,14 +412,19 @@ class ReconApp(ctk.CTk):
         self._listen_for_result()
 
     def _set_sidebar_state(self, state="normal"):
-        """Habilita o deshabilita los botones del menú lateral."""
+        """Bloquea o habilita la navegación lateral durante procesos de cámara para evitar colisiones de estado y fugas de recursos.
+        RNF-01, RNF-03"""
         for btn in self.sidebar_buttons:
             btn.configure(state=state)
     
     def _clear_view(self):
+        """Destruye dinámicamente los widgets del área principal para permitir renderización de nuevas vistas sin reiniciar la app.
+        RNF-01, RNF-06 """
         for w in self.main_view.winfo_children(): w.destroy()
 
     def _activate_class_logic(self, cid, name):
+        """Genera token de sesión, persiste el estado en JSON y registra el evento en la auditoría administrativa.
+        RF-10, RNF-05, RNF-06 """
         self.current_session = {
             "class_id": cid, 
             "clase": name, 
@@ -411,6 +442,8 @@ class ReconApp(ctk.CTk):
         self.show_dashboard()
 
     def _close_class_logic(self):
+        """Finaliza la sesión activa, elimina el archivo de estado, registra el cierre en auditoría y retorna al dashboard.
+        RF-10, RNF-06 """
         if self.current_session:
             cid = self.current_session.get("class_id")
             name = self.current_session.get("clase")
@@ -428,6 +461,8 @@ class ReconApp(ctk.CTk):
         self.show_dashboard()
 
     def _create_new_class_logic(self):
+        """Valida entrada, genera ID automático (CLS-XXX), persiste la nueva clase en classes.json y audita la creación.
+        RF-10, RNF-06, RNF-07 """
         name = self.new_class_entry.get().strip()
         if not name: return
 
@@ -466,6 +501,8 @@ class ReconApp(ctk.CTk):
         self.show_classes()
 
     def show_reports(self):
+        """Renderiza el módulo de reportes con filtros multinivel (materia, fecha, código) y botones de exportación.
+        RF-08, RNF-01 """
         self._clear_view()
         ctk.CTkLabel(self.main_view, text="MÓDULO DE REPORTES", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
 
@@ -514,6 +551,7 @@ class ReconApp(ctk.CTk):
         self._generate_report_logic()
         
     def _generate_report_logic(self):
+        """Aplica filtros en memoria sobre el log de asistencia, verifica integridad criptográfica (HMAC) por fila y renderiza tabla con alertas si hay manipulación. RF-08, RNF-05, RNF-06 """
         # Limpiar tabla anterior
         for widget in self.report_scroll.winfo_children():
             widget.destroy()
@@ -578,13 +616,16 @@ class ReconApp(ctk.CTk):
             ctk.CTkFrame(self.report_scroll, height=1, fg_color="#34495e").pack(fill="x", padx=5)
 
     def _on_closing(self):
+        """Gestiona el cierre seguro de la aplicación, terminando workers activos y liberando memoria/cámara antes de destruir la ventana.
+        RNF-03, RNF-06, RNF-07 """
         self.stop_event.set()
         if self.worker_process and self.worker_process.is_alive():
             self.worker_process.terminate()
         self.destroy()
         
     def _delete_class_logic(self, cid):
-        """Marca una clase como 'hidden' con confirmación previa."""
+        """Ejecuta eliminación lógica (Soft Delete) cambiando estado a hidden, conserva historial y audita la acción.
+        RF-10, RNF-06, RNF-09"""
         if not os.path.exists(self.classes_path): return
         
         # Cuadro de diálogo de confirmación
@@ -615,6 +656,8 @@ class ReconApp(ctk.CTk):
             self.show_classes()
             
     def _manage_enrollment_view(self, cid):
+        """Muestra interfaz de matriculación específica por clase, listando estudiantes inscritos y permitiendo altas/bajas.
+        RF-01, RF-10, RNF-01 """
         self._clear_view()
         
         with open(self.classes_path, "r", encoding='utf-8') as f:
@@ -653,6 +696,8 @@ class ReconApp(ctk.CTk):
         ctk.CTkButton(self.main_view, text="Volver", command=self.show_classes).pack(pady=10)
 
     def _add_student_to_class(self, cid):
+        """Valida existencia biométrica del código, lo añade a la lista de la clase y registra la acción en auditoría.
+        RF-01, RF-10, RNF-06 """
         code = self.enroll_code_entry.get().strip()
         if not code: return
         
@@ -681,6 +726,8 @@ class ReconApp(ctk.CTk):
         self._manage_enrollment_view(cid)
 
     def _remove_student_from_class(self, cid, student_code):
+        """Retira estudiante de la clase activa, actualiza classes.json y genera log administrativo.
+        RF-01, RF-10, RNF-06 """
         with open(self.classes_path, "r", encoding='utf-8') as f:
             data = json.load(f)
             
@@ -699,6 +746,8 @@ class ReconApp(ctk.CTk):
         self._manage_enrollment_view(cid)
         
     def _rename_class_logic(self, cid, old_name):
+        """Permite renombrar asignatura, actualiza metadatos y sincroniza el nombre en la sesión activa si está en curso.
+        RF-10, RNF-06 """
         dialog = ctk.CTkInputDialog(text=f"Nuevo nombre para '{old_name}':", title="Renombrar Materia")
         new_name = dialog.get_input()
         
@@ -728,7 +777,8 @@ class ReconApp(ctk.CTk):
             self.show_classes()    
 
     def _export_report_to_excel(self):
-        """Exporta el reporte filtrado a un archivo Excel (.xlsx)."""
+        """Exporta el reporte filtrado a formato .xlsx manteniendo integridad de IDs y registrando la acción en auditoría.
+        RF-08, RNF-06, RNF-07"""
         df = self.persistence.get_attendance_data()
         
         if df.empty:
@@ -776,7 +826,8 @@ class ReconApp(ctk.CTk):
                 messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
 
     def show_profiles(self):
-        """Muestra la lista de rostros registrados en el sistema."""
+        """Lista todos los perfiles biométricos registrados con opción de eliminación segura mediante confirmación y auditoría.
+        RF-01, RF-10, RNF-09"""
         self._clear_view()
         
         ctk.CTkLabel(self.main_view, text="GESTIÓN DE PERFILES BIOMÉTRICOS", 
@@ -816,7 +867,8 @@ class ReconApp(ctk.CTk):
             ctk.CTkFrame(scroll_frame, height=1, fg_color="#34495e").pack(fill="x")
 
     def _delete_profile_logic(self, code, name):
-        """Ejecuta la eliminación del perfil con confirmación y auditoría."""
+        """Ejecuta eliminación física del vector cifrado, actualiza encrypted_registry.bin y genera registro forense.
+        RF-01, RNF-05, RNF-09"""
         msg = f"¿Está seguro de eliminar el perfil de {name} ({code})?\nEsta acción no se puede deshacer."
         if not messagebox.askyesno("Confirmar Eliminación", msg):
             return
@@ -834,6 +886,8 @@ class ReconApp(ctk.CTk):
             messagebox.showerror("Error", "No se pudo eliminar el perfil.")
 
     def _create_telemetry_card(self, parent, col, title, items):
+        """Helper UI que renderiza tarjetas informativas en el dashboard con indicadores de estado y colores dinámicos.
+        RNF-01, RNF-06 """
         card = ctk.CTkFrame(parent, border_width=2, border_color="#34495e")
         card.grid(row=0, column=col, padx=10, sticky="nsew")
         
@@ -849,15 +903,16 @@ class ReconApp(ctk.CTk):
             ctk.CTkLabel(card, text=label_text, text_color=color).pack(pady=2)
 
     def _log_to_console(self, message):
-        """Añade un mensaje al historial con timestamp."""
+        """Agrega mensajes con timestamp a la consola visual en tiempo real, manteniendo un buffer de 30 entradas para optimizar RAM.
+        RNF-01, RNF-04, RNF-06"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         formatted_msg = f"[{timestamp}] {message}"
         self.console_logs.append(formatted_msg)
-        # Mantener solo los últimos 50 mensajes para no saturar RAM
-        if len(self.console_logs) > 50: self.console_logs.pop(0)
+        # Mantener solo los últimos 30 mensajes para no saturar RAM
+        if len(self.console_logs) > 30: self.console_logs.pop(0)
 
     def show_admin_audit(self):
-        """Muestra el historial de auditoría administrativa descifrado."""
+        """Descifra y muestra los últimos 30 eventos administrativos en formato compacto, con opciones de respaldo/restauración de llave maestra. RNF-05, RNF-06, RNF-09"""
         # Recuperar logs descifrados
         logs = self.persistence.get_admin_audit_logs()
         self._clear_view()
@@ -952,7 +1007,8 @@ class ReconApp(ctk.CTk):
                          text_color="#95a5a6").pack(side="left", padx=3)
 
     def _export_audit_to_excel(self):
-        """Exporta TODOS los logs de auditoría a Excel sin filtros."""
+        """ Permite decargar todos los registros de auditoría administrativa en formato .xlsx. (altas, bajas, gestión de llaves).
+        RF-08, RNF-06, RNF-07"""
         logs = self.persistence.get_admin_audit_logs()
         if not logs:
             messagebox.showwarning("Exportar", "No hay registros de auditoría para exportar.")
@@ -977,7 +1033,8 @@ class ReconApp(ctk.CTk):
                 messagebox.showerror("Error", f"No se pudo exportar el archivo: {e}")
 
     def _handle_key_backup(self):
-        """Gestiona la exportación de la llave maestra cifrada."""
+        """Exporta la llave simétrica cifrada en un archivo .vault protegido por contraseña derivada con PBKDF2 (100k iteraciones).
+        RNF-05, RNF-06"""
         filepath = filedialog.asksaveasfilename(
             defaultextension=".vault",
             filetypes=[("Security Vault", "*.vault")],
@@ -997,7 +1054,7 @@ class ReconApp(ctk.CTk):
             messagebox.showerror("Error", f"No se pudo exportar la llave: {str(e)}")
 
     def _handle_key_restore(self):
-        """Gestiona la restauración de la llave desde un archivo .vault."""
+        """Restaura la llave maestra desde un respaldo .vault, verifica contraseña y reinicia la aplicación para aplicar cambios de seguridad. RNF-05, RNF-06"""
         filepath = filedialog.askopenfilename(
             filetypes=[("Security Vault", "*.vault")],
             title="Seleccione el archivo de respaldo"
@@ -1027,4 +1084,4 @@ class ReconApp(ctk.CTk):
 if __name__ == "__main__": 
     multiprocessing.freeze_support() 
     app = ReconApp(); app.mainloop()
-    
+   

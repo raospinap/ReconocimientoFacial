@@ -1,5 +1,11 @@
-#.\gui_app.py
+#.\src\ai_engine.py
 
+"""
+MÓDULO: Motor de Inferencia (Side-Car Process)
+DESCRIPCIÓN: Pipeline de Visión Artificial aislado de la GUI. 
+Ejecuta captura, detección y reconocimiento para evitar bloqueos.
+CUMPLIMIENTO: RF-02, RF-03, RF-04, RF-05
+"""
 import os
 import cv2
 import numpy as np
@@ -12,7 +18,7 @@ from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
 
 def _clean_text(text):
-    """Elimina tildes y eñes"""
+    """Elimina tildes y eñes para compatibilidad con OpenCV."""
     if not text: return ""
     return ''.join(
         c for c in unicodedata.normalize('NFD', text)
@@ -21,7 +27,8 @@ def _clean_text(text):
 
 def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allowed_students, result_queue, stop_event):
     """
-    Motor de IA con manejo explícito de None para NumPy y color de texto corregido.
+    OPTIMIZACIÓN DE RECURSOS: Reducción de resolución y FPS para cumplimiento RNF-03 
+    (Respuesta rápida) en hardware limitado. 
     """
     security = SecurityManager()
     persistence = PersistenceManager(security)
@@ -38,7 +45,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
 
     enroll_vectors = []
     enroll_stage = 0
-    stages_text = ["Mire al frente", "Giro leve Izquierda", "Giro leve Derecha"]
+    stages_text = ["Mire al frente  ", "Giro leve Izquierda  ", "Giro leve Derecha  "]
     win_title = "REGISTRO BIOMETRICO" if mode == "enroll" else "CONTROL DE ASISTENCIA"
     last_capture_time = 0
     is_processing = False
@@ -79,13 +86,12 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
         face_ready = False
         try:
             faces = DeepFace.extract_faces(frame, detector_backend="mediapipe", enforce_detection=True)
-            if faces and faces[0]["facial_area"]['w'] > (w * 0.10):
+            if faces and faces[0]["facial_area"]['w'] > (w * 0.12):
                 face_ready = True
         except Exception as e:
-            # Solo loguea si es un error real de librería, no por falta de rostro en frame
             if "Face could not be detected" not in str(e):
                 print(f"[ERROR CRÍTICO DETECCIÓN] {e}")
-            
+
         if not light_ok:
             status_color = (0, 165, 255)
             cv2.putText(display_frame, "ADVERTENCIA: POCA LUZ", (20, h-60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
@@ -97,7 +103,10 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
 
         cv2.ellipse(display_frame, (w//2, h//2), (int(w*0.22), int(h*0.35)), 0, 0, 360, status_color, 2)
 
-        # Lógica de Enrolamiento
+        # --- LÓGICA DE ENROLAMIENTO ---
+        #RF-01 (Registro): Validación de unicidad biométrica.
+        #Si la similitud > 0.80, se rechaza para evitar colisiones de identidad.
+        
         if mode == "enroll":
             if enroll_stage < 3:
                 txt_stage = f"ETAPA {enroll_stage+1}/3: {stages_text[enroll_stage]}"
@@ -158,7 +167,10 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                     enroll_stage = 0
                 break
 
-        # Lógica de Asistencia
+        # --- LÓGICA DE ASISTENCIA ---
+        #RF-07 (Unicidad): Lógica de Cooldown temporal (8s).
+        #Previene que el mismo rostro sea reconocido como 'nuevo' por micro-movimientos.
+        
         elif mode == "attendance":
             cv2.putText(display_frame, f"CLASE: {active_class_name}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
             cv2.rectangle(display_frame, (0, h - 50), (w, h), (0, 0, 0), -1)
@@ -174,7 +186,7 @@ def ai_camera_worker(mode, name, code, active_class_id, active_class_name, allow
                     
                     cv2.rectangle(display_frame, (x, y), (x + w_f, y + h_f), (0, 255, 0), 2)
 
-                    if w_f > (w * 0.10) and frame_counter % skip_frames == 0:
+                    if w_f > (w * 0.12) and frame_counter % skip_frames == 0:
                         res = DeepFace.represent(frame[y:y+h_f, x:x+w_f], model_name="ArcFace", detector_backend="skip", enforce_detection=False)
                         emb = np.array(res[0]["embedding"])
                         best_dist, match_id, match_name = 0.0, None, None
