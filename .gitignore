@@ -16,4 +16,4 @@ recover_class.py
 .DS_Store
 Thumbs.db
 docs/build/
-docs/source/
+docs/_build/

@@ -78,7 +78,7 @@ ReconFacial/
 
 2. **Crear entorno virtual e instalar dependencias:**
    ```bash
-   python -m venv venv
+   python -3.10 -m venv venv
    
    # Windows
    .\venv\Scripts\activate
