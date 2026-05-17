@@ -1,0 +1,352 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="es" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Referencia Técnica de Módulos &mdash; documentación de PROTOTIPO FUNCIONAL DE SISTEMA DE CONTROL DE ASISTENCIA A CLASES MEDIANTE RECONOCIMIENTO FACIAL BIOMÉTRICO - 1.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=4936afed"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/translations.js?v=f85f4cfb"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Índice" href="genindex.html" />
+    <link rel="search" title="Búsqueda" href="search.html" />
+    <link rel="prev" title="PROTOTIPO FUNCIONAL DE SISTEMA DE CONTROL DE ASISTENCIA A CLASES MEDIANTE RECONOCIMIENTO FACIAL BIOMÉTRICO documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            PROTOTIPO FUNCIONAL DE SISTEMA DE CONTROL DE ASISTENCIA A CLASES MEDIANTE RECONOCIMIENTO FACIAL BIOMÉTRICO
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Buscar documentos" aria-label="Buscar documentos" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Secciones:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Referencia Técnica de Módulos</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-gui_app">Interfaz Gráfica Principal (Orquestador)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gui_app.ReconApp"><code class="docutils literal notranslate"><span class="pre">ReconApp</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_admin_audit"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_admin_audit()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_classes"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_classes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_dashboard"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_dashboard()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_enrollment"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_enrollment()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_live_attendance"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_live_attendance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_profiles"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_profiles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#gui_app.ReconApp.show_reports"><code class="docutils literal notranslate"><span class="pre">ReconApp.show_reports()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-src.ai_engine">Motor de Inferencia (IA)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#src.ai_engine.ai_camera_worker"><code class="docutils literal notranslate"><span class="pre">ai_camera_worker()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-src.persistence">Gestión de Persistencia</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#src.persistence.PersistenceManager"><code class="docutils literal notranslate"><span class="pre">PersistenceManager</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.delete_profile"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.delete_profile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.get_admin_audit_logs"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.get_admin_audit_logs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.get_already_marked_today"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.get_already_marked_today()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.get_attendance_data"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.get_attendance_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.get_system_telemetry"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.get_system_telemetry()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.load_profiles"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.load_profiles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.log_admin_action"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.log_admin_action()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.log_attendance"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.log_attendance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.persistence.PersistenceManager.save_profiles"><code class="docutils literal notranslate"><span class="pre">PersistenceManager.save_profiles()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-src.security_manager">Seguridad Criptográfica</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#src.security_manager.SecurityManager"><code class="docutils literal notranslate"><span class="pre">SecurityManager</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#src.security_manager.SecurityManager.decrypt_data"><code class="docutils literal notranslate"><span class="pre">SecurityManager.decrypt_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.security_manager.SecurityManager.encrypt_data"><code class="docutils literal notranslate"><span class="pre">SecurityManager.encrypt_data()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.security_manager.SecurityManager.export_key_backup"><code class="docutils literal notranslate"><span class="pre">SecurityManager.export_key_backup()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#src.security_manager.SecurityManager.import_key_backup"><code class="docutils literal notranslate"><span class="pre">SecurityManager.import_key_backup()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">PROTOTIPO FUNCIONAL DE SISTEMA DE CONTROL DE ASISTENCIA A CLASES MEDIANTE RECONOCIMIENTO FACIAL BIOMÉTRICO</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Referencia Técnica de Módulos</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/modules.rst.txt" rel="nofollow"> Ver código fuente de la página</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="referencia-tecnica-de-modulos">
+<h1>Referencia Técnica de Módulos<a class="headerlink" href="#referencia-tecnica-de-modulos" title="Link to this heading"></a></h1>
+<p>Este documento detalla la arquitectura interna del prototipo, incluyendo la lógica de visión artificial, persistencia segura y gestión criptográfica.</p>
+<div class="toctree-wrapper compound">
+</div>
+<section id="module-gui_app">
+<span id="interfaz-grafica-principal-orquestador"></span><h2>Interfaz Gráfica Principal (Orquestador)<a class="headerlink" href="#module-gui_app" title="Link to this heading"></a></h2>
+<p>MÓDULO: Interfaz Gráfica y Orquestación
+DESCRIPCIÓN: Controlador principal basado en CustomTkinter. Gestiona el ciclo de vida
+de la aplicación, navegación entre vistas y comunicación asíncrona con el motor de IA
+mediante multiprocessing.Queue para evitar bloqueos en la UI.
+CUMPLIMIENTO: RNF-01 (Interfaz Intuitiva), RNF-06 (Estandarización)</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="gui_app.ReconApp">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">gui_app.</span></span><span class="sig-name descname"><span class="pre">ReconApp</span></span><a class="reference internal" href="_modules/gui_app.html#ReconApp"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">CTk</span></code></p>
+<p>Controlador principal de la aplicación.
+Mantiene el estado de sesión, gestión de workers y cola de resultados en memoria.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_admin_audit">
+<span class="sig-name descname"><span class="pre">show_admin_audit</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_admin_audit"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_admin_audit" title="Link to this definition"></a></dt>
+<dd><p>Descifra y muestra los últimos 30 eventos administrativos en formato compacto, con opciones de respaldo/restauración de llave maestra. RNF-05, RNF-06, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_classes">
+<span class="sig-name descname"><span class="pre">show_classes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_classes"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_classes" title="Link to this definition"></a></dt>
+<dd><p>Muestra la interfaz de administración de asignaturas: creación, activación, matriculación, renombrado y eliminación lógica.
+RF-01, RF-10, RNF-01, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_dashboard">
+<span class="sig-name descname"><span class="pre">show_dashboard</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_dashboard"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_dashboard" title="Link to this definition"></a></dt>
+<dd><p>Renderiza la vista principal con telemetría (rostros, peso de BD, integridad), estado de sesión y consola de eventos en tiempo real.
+RF-09, RF-10, RNF-01, RNF-04</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_enrollment">
+<span class="sig-name descname"><span class="pre">show_enrollment</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_enrollment"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_enrollment" title="Link to this definition"></a></dt>
+<dd><p>Presenta el formulario de registro de estudiantes, incluyendo campos de datos y el aviso legal de consentimiento informado (Ley 1581). RF-01, RNF-08, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_live_attendance">
+<span class="sig-name descname"><span class="pre">show_live_attendance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_live_attendance"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_live_attendance" title="Link to this definition"></a></dt>
+<dd><p>Verifica sesión activa, carga lista blanca de matriculados, valida hardware y lanza el worker en modo asistencia con feedback inmediato. RF-02, RF-05, RF-07, RNF-01, RNF-03</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_profiles">
+<span class="sig-name descname"><span class="pre">show_profiles</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_profiles"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_profiles" title="Link to this definition"></a></dt>
+<dd><p>Lista todos los perfiles biométricos registrados con opción de eliminación segura mediante confirmación y auditoría.
+RF-01, RF-10, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="gui_app.ReconApp.show_reports">
+<span class="sig-name descname"><span class="pre">show_reports</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/gui_app.html#ReconApp.show_reports"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#gui_app.ReconApp.show_reports" title="Link to this definition"></a></dt>
+<dd><p>Renderiza el módulo de reportes con filtros multinivel (materia, fecha, código) y botones de exportación.
+RF-08, RNF-01</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-src.ai_engine">
+<span id="motor-de-inferencia-ia"></span><h2>Motor de Inferencia (IA)<a class="headerlink" href="#module-src.ai_engine" title="Link to this heading"></a></h2>
+<p>MÓDULO: Motor de Inferencia (Side-Car Process)
+DESCRIPCIÓN: Pipeline de Visión Artificial aislado de la GUI.
+Ejecuta captura, detección y reconocimiento para evitar bloqueos.
+CUMPLIMIENTO: RF-02, RF-03, RF-04, RF-05</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.ai_engine.ai_camera_worker">
+<span class="sig-prename descclassname"><span class="pre">src.ai_engine.</span></span><span class="sig-name descname"><span class="pre">ai_camera_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mode</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">code</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_class_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_class_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allowed_students</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result_queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_event</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/ai_engine.html#ai_camera_worker"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.ai_engine.ai_camera_worker" title="Link to this definition"></a></dt>
+<dd><p>OPTIMIZACIÓN DE RECURSOS: Reducción de resolución y FPS para cumplimiento RNF-03
+(Respuesta rápida) en hardware limitado.</p>
+</dd></dl>
+
+</section>
+<section id="module-src.persistence">
+<span id="gestion-de-persistencia"></span><h2>Gestión de Persistencia<a class="headerlink" href="#module-src.persistence" title="Link to this heading"></a></h2>
+<p>Capa de persistencia local que orquesta la escritura/lectura de datos biométricos y administrativos.
+Implementa serialización binaria (Msgpack) cifrada con AES-256
+Garantiza la integridad de los registros de asistencia mediante firmas HMAC-SHA256 y mantiene logs de auditoría inmutables.
+Su diseño append-only y sus validaciones en memoria cumplen con la optimización de espacio y la trazabilidad exigida por ISO 25012.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.persistence.</span></span><span class="sig-name descname"><span class="pre">PersistenceManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">security_manager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Gestiona la persistencia con capas de seguridad HMAC y Cifrado AES.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.delete_profile">
+<span class="sig-name descname"><span class="pre">delete_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">student_code</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.delete_profile"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.delete_profile" title="Link to this definition"></a></dt>
+<dd><p>Elimina un perfil biométrico del diccionario en memoria y reescribe el archivo cifrado actualizado.
+RF-01, RNF-05, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.get_admin_audit_logs">
+<span class="sig-name descname"><span class="pre">get_admin_audit_logs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.get_admin_audit_logs"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.get_admin_audit_logs" title="Link to this definition"></a></dt>
+<dd><p>Lee y descifra el contenedor binario de auditoría, retornando la lista de eventos para renderizado en GUI.
+RNF-05, RNF-06</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.get_already_marked_today">
+<span class="sig-name descname"><span class="pre">get_already_marked_today</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">active_class_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.get_already_marked_today"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.get_already_marked_today" title="Link to this definition"></a></dt>
+<dd><p>Filtra master_log.csv por fecha y clase activa, retornando un set de códigos para evitar registros duplicados en sesión.
+RF-07, RNF-03</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.get_attendance_data">
+<span class="sig-name descname"><span class="pre">get_attendance_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.get_attendance_data"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.get_attendance_data" title="Link to this definition"></a></dt>
+<dd><p>Carga master_log.csv, verifica firmas HMAC por fila y marca integrity_ok=False en registros alterados.
+RF-08, ISO 25012, RNF-06</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.get_system_telemetry">
+<span class="sig-name descname"><span class="pre">get_system_telemetry</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.get_system_telemetry"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.get_system_telemetry" title="Link to this definition"></a></dt>
+<dd><p>Calcula pesos de archivos y verifica existencia de estructuras críticas para el Dashboard de estado.
+RNF-04, RNF-06</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.load_profiles">
+<span class="sig-name descname"><span class="pre">load_profiles</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.load_profiles"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.load_profiles" title="Link to this definition"></a></dt>
+<dd><p>Descifra y deserializa el registro biométrico desde encrypted_registry.bin, manejando excepciones sin crashear la UI.
+RF-01, RNF-04, RNF-05</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.log_admin_action">
+<span class="sig-name descname"><span class="pre">log_admin_action</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">event_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.log_admin_action"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.log_admin_action" title="Link to this definition"></a></dt>
+<dd><p>Descifra el historial de auditoría, añade la nueva acción administrativa y vuelve a cifrar/persistir admin_audit.bin.
+RNF-05, RNF-06, RNF-09</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.log_attendance">
+<span class="sig-name descname"><span class="pre">log_attendance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">student_data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.log_attendance"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.log_attendance" title="Link to this definition"></a></dt>
+<dd><p>Consulta duplicados diarios en memoria, genera firma HMAC y añade fila al CSV en modo append-only.
+RF-06, RF-07, RNF-04</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.persistence.PersistenceManager.save_profiles">
+<span class="sig-name descname"><span class="pre">save_profiles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">profiles_dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/persistence.html#PersistenceManager.save_profiles"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.persistence.PersistenceManager.save_profiles" title="Link to this definition"></a></dt>
+<dd><p>Serializa vectores a listas nativas, empaqueta con Msgpack y persiste el blob cifrado en disco.
+RF-01, RF-04, RNF-04, RNF-05</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-src.security_manager">
+<span id="seguridad-criptografica"></span><h2>Seguridad Criptográfica<a class="headerlink" href="#module-src.security_manager" title="Link to this heading"></a></h2>
+<p>Núcleo criptográfico del sistema.
+Gestiona el ciclo de vida de la llave maestra simétrica (Fernet/AES-256).
+Garantiza que ningún vector biométrico o metadato personal se almacene en texto plano y proporciona mecanismos seguros de respaldo y restauración mediante derivación de claves (PBKDF2).
+Alineado estrictamente con el principio de Privacidad desde el Diseño y la Ley 1581 de 2012</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.security_manager.SecurityManager">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.security_manager.</span></span><span class="sig-name descname"><span class="pre">SecurityManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'data/security/secret.key'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/security_manager.html#SecurityManager"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.security_manager.SecurityManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Clase encargada de la gestión de llaves y criptografía simétrica.
+Garantiza que los vectores faciales y metadatos sean ilegibles fuera
+de la aplicación.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.security_manager.SecurityManager.decrypt_data">
+<span class="sig-name descname"><span class="pre">decrypt_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">encrypted_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="reference internal" href="_modules/src/security_manager.html#SecurityManager.decrypt_data"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.security_manager.SecurityManager.decrypt_data" title="Link to this definition"></a></dt>
+<dd><p>Descifra datos protegidos para su procesamiento en memoria, validando firma interna de Fernet.
+RF-01, RNF-05</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.security_manager.SecurityManager.encrypt_data">
+<span class="sig-name descname"><span class="pre">encrypt_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bytes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bytes</span></span></span><a class="reference internal" href="_modules/src/security_manager.html#SecurityManager.encrypt_data"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.security_manager.SecurityManager.encrypt_data" title="Link to this definition"></a></dt>
+<dd><p>Cifra blobs binarios (vectores, auditoría) usando Fernet, garantizando confidencialidad y autenticidad.
+RF-01, RF-04, RNF-05</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.security_manager.SecurityManager.export_key_backup">
+<span class="sig-name descname"><span class="pre">export_key_backup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backup_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/security_manager.html#SecurityManager.export_key_backup"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.security_manager.SecurityManager.export_key_backup" title="Link to this definition"></a></dt>
+<dd><p>Genera salt aleatorio, deriva clave temporal, cifra la master key y concatena [SALT + CIPHERTEXT] en .vault.
+RNF-05, RNF-06, RNF-07</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.security_manager.SecurityManager.import_key_backup">
+<span class="sig-name descname"><span class="pre">import_key_backup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backup_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/security_manager.html#SecurityManager.import_key_backup"><span class="viewcode-link"><span class="pre">[fuente]</span></span></a><a class="headerlink" href="#src.security_manager.SecurityManager.import_key_backup" title="Link to this definition"></a></dt>
+<dd><p>Lee backup, extrae salt, deriva clave, descifra master key y actualiza estado en runtime/disco.
+RNF-05, RNF-06, RNF-07</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Pie de página">
+        <a href="index.html" class="btn btn-neutral float-left" title="PROTOTIPO FUNCIONAL DE SISTEMA DE CONTROL DE ASISTENCIA A CLASES MEDIANTE RECONOCIMIENTO FACIAL BIOMÉTRICO documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Anterior</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Derechos de autor 2026, Daniela Martínez, Juan Diego Amaya, Santiago Quiroga, Rolando Ospina.</p>
+  </div>
+
+  Compilado con <a href="https://www.sphinx-doc.org/">Sphinx</a> usando un
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">tema</a>
+    proporcionado por <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
