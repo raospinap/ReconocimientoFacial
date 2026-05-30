@@ -22,6 +22,7 @@ import cv2
 import time
 import pandas as pd
 import multiprocessing
+import queue
 
 from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
@@ -62,10 +63,45 @@ class ReconApp(ctk.CTk):
         
         self.active_session_file = "data/attendance/active_session.json"
         self.classes_path = "data/meta/classes.json"
+        self.settings_path = "data/meta/settings.json"
+        self.performance_modes = {
+            "Auto": "auto",
+            "Lento": "lento",
+            "Normal": "normal",
+            "Rápido": "rapido"
+        }
+        self.performance_mode_var = ctk.StringVar(value=self._load_settings().get("performance_mode_label", "Auto"))
         self.current_session = self._load_active_session()
         
         self._setup_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
+
+    def _load_settings(self):
+        """Carga preferencias locales de la interfaz, incluyendo el modo de rendimiento."""
+        if os.path.exists(self.settings_path):
+            try:
+                with open(self.settings_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (OSError, json.JSONDecodeError):
+                return {}
+        return {}
+
+    def _save_settings(self):
+        """Persiste preferencias locales no sensibles."""
+        os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
+        data = {"performance_mode_label": self.performance_mode_var.get()}
+        with open(self.settings_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+
+    def _get_performance_mode(self):
+        """Devuelve el identificador interno del modo de rendimiento seleccionado."""
+        label = self.performance_mode_var.get()
+        return self.performance_modes.get(label, "auto")
+
+    def _on_performance_mode_change(self, _value):
+        """Actualiza preferencia de rendimiento y deja trazabilidad visual en la consola."""
+        self._save_settings()
+        self._log_to_console(f"Modo de rendimiento: {self.performance_mode_var.get()}")
 
     def _load_active_session(self):
         """Recupera y deserializa el estado de la última clase activa desde active_session.json para mantener continuidad tras reinicios.
@@ -113,6 +149,16 @@ class ReconApp(ctk.CTk):
         
         self.btn_audit = ctk.CTkButton(self.sidebar, text="Sistema", command=self.show_admin_audit)
         self.btn_audit.pack(pady=5, padx=20); self.sidebar_buttons.append(self.btn_audit)
+
+        ctk.CTkLabel(self.sidebar, text="Rendimiento", font=ctk.CTkFont(size=12, weight="bold")).pack(pady=(20, 4))
+        self.performance_mode_menu = ctk.CTkOptionMenu(
+            self.sidebar,
+            values=list(self.performance_modes.keys()),
+            variable=self.performance_mode_var,
+            command=self._on_performance_mode_change
+        )
+        self.performance_mode_menu.pack(pady=5, padx=20)
+        self.sidebar_buttons.append(self.performance_mode_menu)
         
         ctk.CTkButton(self.sidebar, text="Salir", fg_color="#e74c3c", command=self._on_closing).pack(pady=5, padx=20)
 
@@ -289,7 +335,7 @@ class ReconApp(ctk.CTk):
         self._set_sidebar_state("disabled")
         self.worker_process = multiprocessing.Process(
             target=ai_camera_worker, 
-            args=("enroll", n, c, None, None, None, self.result_queue, self.stop_event)
+            args=("enroll", n, c, None, None, None, self.result_queue, self.stop_event, self._get_performance_mode())
         )
         self.worker_process.start()
         self._listen_for_result()
@@ -298,57 +344,77 @@ class ReconApp(ctk.CTk):
         """Sondea asíncronamente la cola de resultados del worker para actualizar la UI, limpiar campos y liberar recursos.
         RNF-03, RNF-06"""
         try:
-            res = self.result_queue.get_nowait()
-            
-            # Caso: Registro de rostro (Enrollment)
-            if isinstance(res, str) and res.startswith("REG:"):
-                nombre = res.split(":")[1]
-                msg = f"✅ REGISTRO EXITOSO: {nombre}"
-                if hasattr(self, 'lbl_last_reg'):
-                    self.lbl_last_reg.configure(text=msg, text_color="#2ecc71")
-                self._log_to_console(msg) # [NUEVO]
-            
-            # Caso: Resultado de Asistencia (Si envías un diccionario desde el worker)
-            elif isinstance(res, dict):
-                if res.get('status') == 'success':
-                    msg = f"Asistencia: {res['nombre']} ({res['codigo']})"
-                    if hasattr(self, 'lbl_last_reg'):
-                        self.lbl_last_reg.configure(text=f"✅ {msg}", text_color="#2ecc71")
-                    self._log_to_console(msg)
-                
-                elif res.get('status') == 'not_enrolled':
-                    msg = f"No Matriculado: {res['nombre']}"
-                    if hasattr(self, 'lbl_last_reg'):
-                        self.lbl_last_reg.configure(text=f"⚠️ {msg}", text_color="#e67e22")
-                    self._log_to_console(f"ALERTA: {msg}")
-
-            # Casos de cierre de proceso
-            elif res in ["SUCCESS", "DUPLICATE", "CANCELLED"]:
-                if res == "SUCCESS":
-                    if hasattr(self, 'enroll_status'):
-                        self.enroll_status.configure(text="✅ PROCESO COMPLETADO", text_color="#2ecc71")
-                        self._log_to_console("Sistema: Proceso finalizado correctamente.")
-                elif res == "DUPLICATE":
-                    if hasattr(self, 'enroll_status'):
-                        self.enroll_status.configure(text="⚠️ REGISTRO DUPLICADO", text_color="#f1c40f")
-                        self._log_to_console("Sistema: Registro duplicado.")
-                elif res == "CANCELLED":
-                    if hasattr(self, 'enroll_status'):
-                        self.enroll_status.configure(text="⚠️ CÁMARA CERRADA", text_color="#f1c40f")
-                        self._log_to_console("Sistema: Cámara cerrada por el usuario.")
-                
-                if hasattr(self, 'ent_code'):
-                    self.ent_code.delete(0, 'end')
-                if hasattr(self, 'ent_name'):
-                    self.ent_name.delete(0, 'end')
-                    
-                self._set_sidebar_state("normal")
-                self.stop_event.set()
-        except:
+            while True:
+                self._handle_worker_result(self.result_queue.get_nowait())
+        except queue.Empty:
             if self.worker_process and self.worker_process.is_alive():
                 self.after(100, self._listen_for_result)
             else:
                 self._set_sidebar_state("normal")
+        except Exception as e:
+            self._log_to_console(f"ERROR: Lectura de worker falló: {e}")
+            self._set_sidebar_state("normal")
+
+    def _handle_worker_result(self, res):
+        """Procesa mensajes enviados por el worker de cámara."""
+        if isinstance(res, str) and res.startswith("REG:"):
+            nombre = res.split(":")[1]
+            msg = f"REGISTRO EXITOSO: {nombre}"
+            if hasattr(self, 'lbl_last_reg'):
+                self.lbl_last_reg.configure(text=msg, text_color="#2ecc71")
+            self._log_to_console(msg)
+        
+        elif isinstance(res, dict):
+            status = res.get("status")
+            if status == "success":
+                msg = f"Asistencia: {res['nombre']} ({res['codigo']})"
+                color = "#2ecc71"
+            elif status == "already_marked":
+                msg = f"Ya registrado: {res.get('nombre', 'N/A')} ({res.get('codigo', 'N/A')})"
+                color = "#f1c40f"
+            elif status == "not_enrolled_in_class":
+                msg = f"Enrolado no matriculado: {res.get('nombre', 'N/A')} ({res.get('codigo', 'N/A')})"
+                color = "#e67e22"
+            elif status == "unknown_face":
+                msg = "Rostro no registrado"
+                color = "#e74c3c"
+            elif status == "mode_selected":
+                msg = f"Modo activo: {res.get('mode', 'auto')} - {res.get('resolution', '')}"
+                color = "#3498db"
+            elif status == "camera_error":
+                msg = f"Error de cámara: {res.get('message', 'No disponible')}"
+                color = "#e74c3c"
+                self.stop_event.set()
+                self._set_sidebar_state("normal")
+            else:
+                msg = str(res)
+                color = "#95a5a6"
+
+            if hasattr(self, 'lbl_last_reg'):
+                self.lbl_last_reg.configure(text=msg, text_color=color)
+            self._log_to_console(msg)
+
+        elif res in ["SUCCESS", "DUPLICATE", "CANCELLED"]:
+            if res == "SUCCESS":
+                if hasattr(self, 'enroll_status'):
+                    self.enroll_status.configure(text="PROCESO COMPLETADO", text_color="#2ecc71")
+                    self._log_to_console("Sistema: Proceso finalizado correctamente.")
+            elif res == "DUPLICATE":
+                if hasattr(self, 'enroll_status'):
+                    self.enroll_status.configure(text="REGISTRO DUPLICADO", text_color="#f1c40f")
+                    self._log_to_console("Sistema: Registro duplicado.")
+            elif res == "CANCELLED":
+                if hasattr(self, 'enroll_status'):
+                    self.enroll_status.configure(text="CÁMARA CERRADA", text_color="#f1c40f")
+                self._log_to_console("Sistema: Cámara cerrada por el usuario.")
+            
+            if hasattr(self, 'ent_code'):
+                self.ent_code.delete(0, 'end')
+            if hasattr(self, 'ent_name'):
+                self.ent_name.delete(0, 'end')
+                
+            self._set_sidebar_state("normal")
+            self.stop_event.set()
 
     def show_live_attendance(self):
         """Verifica sesión activa, carga lista blanca de matriculados, valida hardware y lanza el worker en modo asistencia con feedback inmediato. RF-02, RF-05, RF-07, RNF-01, RNF-03"""
@@ -377,6 +443,11 @@ class ReconApp(ctk.CTk):
         # Título de la materia y feedback visual para el usuario
         ctk.CTkLabel(self.main_view, text=f"ASISTENCIA: {self.current_session['clase']}", 
                      font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
+        ctk.CTkLabel(
+            self.main_view,
+            text=f"Modo de rendimiento: {self.performance_mode_var.get()}",
+            text_color="#3498db"
+        ).pack(pady=(0, 10))
         
         self.lbl_last_reg = ctk.CTkLabel(self.main_view, text="Esperando registros...", 
                                          font=ctk.CTkFont(size=16, weight="bold"))
@@ -389,6 +460,7 @@ class ReconApp(ctk.CTk):
         if not cap.isOpened():
             messagebox.showerror("Error de Hardware", "La cámara no está disponible.\nVerifique que no esté siendo usada por otra aplicación.")
             self._log_to_console("ERROR: Cámara no disponible o ocupada.")
+            self._set_sidebar_state("normal")
             self.show_dashboard()
             return
         cap.release() # Soltamos rápido para que el worker pueda tomarla
@@ -405,7 +477,8 @@ class ReconApp(ctk.CTk):
                 self.current_session['clase'],   
                 allowed, 
                 self.result_queue, 
-                self.stop_event
+                self.stop_event,
+                self._get_performance_mode()
             )
         )
         self.worker_process.start()
@@ -473,7 +546,8 @@ class ReconApp(ctk.CTk):
                 try:
                     data = json.load(f)
                     if "classes" not in data: data = {"classes": {}}
-                except: data = {"classes": {}}
+                except json.JSONDecodeError:
+                    data = {"classes": {}}
 
         # Generación de ID Automático (CLS-001, CLS-002...)
         existing_ids = [int(k.split('-')[1]) for k in data["classes"].keys() if k.startswith("CLS-")]
@@ -704,8 +778,7 @@ class ReconApp(ctk.CTk):
         # Verificar si el estudiante existe en la base biométrica
         profiles = self.persistence.load_profiles()
         if code not in profiles:
-            # Aquí podrías poner un mensaje de error en la UI
-            print(f"Error: Estudiante {code} no existe en el sistema biométrico.")
+            messagebox.showwarning("Estudiante no registrado", f"El código {code} no existe en el sistema biométrico.")
             return
 
         with open(self.classes_path, "r", encoding='utf-8') as f:

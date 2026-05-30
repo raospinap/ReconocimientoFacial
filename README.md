@@ -16,7 +16,7 @@ Prototipo académico desarrollado bajo la **metodología de Aprendizaje Basado e
 
 ### ✨ Características Principales
 *   🧠 **SOTA & Redes Neuronales:** Pipeline basado en ArcFace para extracción de características biométricas, cumpliendo estándares de precisión académica y requisitos de la asignatura.
-*   🖥️ **Optimizado para Hardware Limitado:** Inferencia ajustada con `frame-skipping`, downscaling adaptativo (640x480) y multiprocesamiento aislado para ejecución fluida en CPUs antiguos sin GPU.
+*   🖥️ **Optimizado para Hardware Limitado:** Modos `Auto`, `Lento`, `Normal` y `Rápido` con resolución de procesamiento adaptativa, separación entre detección/reconocimiento y visualización estable a 640x480 para equipos sin GPU.
 *   🧩 **Arquitectura Modular:** Separación estricta de responsabilidades entre interfaz gráfica (`gui_app.py`) y motor de IA (`src/ai_engine.py`), siguiendo buenas prácticas de ingeniería de software y patrones MVC simplificados.
 *   🔒 **Seguridad & Cumplimiento Normativo:** Diseño alineado a **ISO 25012** (Integridad de Datos) y **Ley 1581 de 2012** (Habeas Data). Cifrado AES-256 para biometría, firmas HMAC-SHA256 en logs y consentimiento informado integrado.
 *   📊 **Auditoría y Reportes:** Trazabilidad inmutable de acciones administrativas y exportación de asistencia a Excel con validación criptográfica automática.
@@ -94,6 +94,25 @@ ReconFacial/
    ```bash
    python gui_app.py
    ```
+
+## ⚙️ Modos de Rendimiento
+
+La barra lateral incluye un selector de rendimiento para adaptar la cámara al equipo disponible:
+
+| Modo | Uso recomendado | Comportamiento |
+| :--- | :--- | :--- |
+| **Auto** | Uso general | Mide FPS de cámara al iniciar, selecciona `Lento`, `Normal` o `Rápido` y reabre la cámara para evitar recortes de driver. |
+| **Lento** | Equipos antiguos o cámara básica | Procesa a baja resolución, detecta y reconoce con menor frecuencia, y prioriza el rostro principal. |
+| **Normal** | Equipos intermedios | Equilibra resolución, frecuencia de detección y respuesta visual. |
+| **Rápido** | Equipos con mejor CPU | Usa mayor resolución y mayor frecuencia de reconocimiento. |
+
+La resolución de procesamiento puede bajar para mejorar rendimiento, pero la ventana de cámara se muestra con tamaño mínimo estable de 640x480 para conservar visibles el óvalo, textos y rectángulos de detección.
+
+En asistencia, el sistema compara primero contra estudiantes matriculados en la clase activa. Si no hay coincidencia, busca en la base global para distinguir entre:
+
+* estudiante matriculado y registrado,
+* estudiante enrolado pero no matriculado,
+* rostro no registrado.
 
 ## 📄 Documentación Técnica
 
