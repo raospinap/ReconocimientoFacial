@@ -12,13 +12,17 @@ import time
 import datetime
 import unicodedata
 import logging
+import json
+import os
 from deepface import DeepFace
 from src.security_manager import SecurityManager
 from src.persistence import PersistenceManager
 
 logger = logging.getLogger(__name__)
 
-CONFIG = {
+PERFORMANCE_CONFIG_PATH = "data/meta/performance_config.json"
+
+DEFAULT_CONFIG = {
     "brightness_min": 75,
     "brightness_max": 230,
     "sharpness_min": 45,
@@ -30,7 +34,7 @@ CONFIG = {
     "debug_mode": False
 }
 
-PERFORMANCE_MODES = {
+DEFAULT_PERFORMANCE_MODES = {
     "lento": {
         "resolution": (320, 240),
         "detect_every": 8,
@@ -58,6 +62,103 @@ PERFORMANCE_MODES = {
 }
 
 
+def _normalize_resolution(value, fallback):
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        try:
+            width = int(value[0])
+            height = int(value[1])
+            if width > 0 and height > 0:
+                return (width, height)
+        except (TypeError, ValueError):
+            pass
+    return fallback
+
+
+def _merge_performance_config(raw):
+    config = DEFAULT_CONFIG.copy()
+    modes = {name: mode.copy() for name, mode in DEFAULT_PERFORMANCE_MODES.items()}
+
+    if isinstance(raw, dict):
+        raw_config = raw.get("config", {})
+        if isinstance(raw_config, dict):
+            for key, default_value in DEFAULT_CONFIG.items():
+                if key not in raw_config:
+                    continue
+                value = raw_config[key]
+                if key == "display_resolution":
+                    config[key] = _normalize_resolution(value, default_value)
+                elif isinstance(default_value, bool):
+                    config[key] = bool(value)
+                elif isinstance(default_value, int):
+                    try:
+                        config[key] = int(value)
+                    except (TypeError, ValueError):
+                        pass
+                elif isinstance(default_value, float):
+                    try:
+                        config[key] = float(value)
+                    except (TypeError, ValueError):
+                        pass
+
+        raw_modes = raw.get("modes", {})
+        if isinstance(raw_modes, dict):
+            for mode_name, defaults in DEFAULT_PERFORMANCE_MODES.items():
+                incoming = raw_modes.get(mode_name, {})
+                if not isinstance(incoming, dict):
+                    continue
+                for key, default_value in defaults.items():
+                    if key not in incoming:
+                        continue
+                    value = incoming[key]
+                    if key == "resolution":
+                        modes[mode_name][key] = _normalize_resolution(value, default_value)
+                    elif isinstance(default_value, bool):
+                        modes[mode_name][key] = bool(value)
+                    elif isinstance(default_value, int):
+                        try:
+                            modes[mode_name][key] = max(1, int(value))
+                        except (TypeError, ValueError):
+                            pass
+
+    return config, modes
+
+
+def _serializable_performance_config(config, modes):
+    data = {"config": {}, "modes": {}}
+    for key, value in config.items():
+        data["config"][key] = list(value) if key == "display_resolution" else value
+    for mode_name, mode_config in modes.items():
+        data["modes"][mode_name] = {}
+        for key, value in mode_config.items():
+            data["modes"][mode_name][key] = list(value) if key == "resolution" else value
+    return data
+
+
+def _load_performance_config():
+    raw = {}
+    if os.path.exists(PERFORMANCE_CONFIG_PATH):
+        try:
+            with open(PERFORMANCE_CONFIG_PATH, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.debug("No se pudo leer performance_config.json: %s", exc)
+
+    config, modes = _merge_performance_config(raw)
+
+    if not os.path.exists(PERFORMANCE_CONFIG_PATH):
+        try:
+            os.makedirs(os.path.dirname(PERFORMANCE_CONFIG_PATH), exist_ok=True)
+            with open(PERFORMANCE_CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(_serializable_performance_config(config, modes), f, indent=4)
+        except OSError as exc:
+            logger.debug("No se pudo crear performance_config.json: %s", exc)
+
+    return config, modes
+
+
+CONFIG, PERFORMANCE_MODES = _load_performance_config()
+
+
 def _clean_text(text):
     """Elimina tildes y eñes para compatibilidad con OpenCV."""
     if not text:
@@ -76,36 +177,54 @@ def _apply_camera_resolution(cap, resolution):
 
 
 def _benchmark_camera(cap):
-    """Mide FPS de lectura de cámara y selecciona un modo base."""
+    """Mide FPS de lectura de cámara y latencia real aproximada de inferencia."""
     _apply_camera_resolution(cap, PERFORMANCE_MODES["normal"]["resolution"])
     start = time.time()
     frames = 0
+    sample_frame = None
     while time.time() - start < 2:
-        ret, _frame = cap.read()
+        ret, frame = cap.read()
         if ret:
             frames += 1
+            sample_frame = frame
     elapsed = max(time.time() - start, 0.001)
     fps = frames / elapsed
-    if fps < 8:
-        return "lento", fps
-    if fps < 15:
-        return "normal", fps
-    return "rapido", fps
+    inference_ms = None
+
+    if sample_frame is not None:
+        try:
+            inference_frame = cv2.resize(sample_frame, PERFORMANCE_MODES["lento"]["resolution"], interpolation=cv2.INTER_AREA)
+            infer_start = time.time()
+            DeepFace.represent(
+                inference_frame,
+                model_name="ArcFace",
+                detector_backend="mediapipe",
+                enforce_detection=False
+            )
+            inference_ms = (time.time() - infer_start) * 1000
+        except Exception as exc:
+            logger.debug("Benchmark de inferencia omitido: %s", exc)
+
+    if fps < 8 or (inference_ms is not None and inference_ms > 900):
+        return "lento", {"fps": fps, "inference_ms": inference_ms}
+    if fps < 15 or (inference_ms is not None and inference_ms > 450):
+        return "normal", {"fps": fps, "inference_ms": inference_ms}
+    return "rapido", {"fps": fps, "inference_ms": inference_ms}
 
 
 def _resolve_performance_mode(cap, requested_mode):
     requested = (requested_mode or "auto").lower()
     if requested == "auto":
-        selected, fps = _benchmark_camera(cap)
+        selected, metrics = _benchmark_camera(cap)
         # Algunos drivers aplican crop/zoom al cambiar resolución con el stream abierto.
         # Reabrir la cámara hace que Auto use el mismo estado limpio que un modo manual.
         cap.release()
         cap = cv2.VideoCapture(0)
     else:
-        selected, fps = requested if requested in PERFORMANCE_MODES else "normal", None
+        selected, metrics = requested if requested in PERFORMANCE_MODES else "normal", {"fps": None, "inference_ms": None}
     cfg = PERFORMANCE_MODES[selected].copy()
     _apply_camera_resolution(cap, cfg["resolution"])
-    return cap, selected, cfg, fps
+    return cap, selected, cfg, metrics
 
 
 def _normalize_vector(vector):
@@ -228,7 +347,7 @@ def ai_camera_worker(
         result_queue.put({"status": "camera_error", "message": "No se pudo abrir la cámara"})
         return
 
-    cap, selected_mode, perf, measured_fps = _resolve_performance_mode(cap, performance_mode)
+    cap, selected_mode, perf, benchmark_metrics = _resolve_performance_mode(cap, performance_mode)
     if not cap.isOpened():
         result_queue.put({"status": "camera_error", "message": "No se pudo reabrir la cámara"})
         return
@@ -236,7 +355,8 @@ def ai_camera_worker(
         "status": "mode_selected",
         "mode": selected_mode,
         "resolution": f"{perf['resolution'][0]}x{perf['resolution'][1]}",
-        "fps": round(measured_fps, 1) if measured_fps is not None else None
+        "fps": round(benchmark_metrics["fps"], 1) if benchmark_metrics["fps"] is not None else None,
+        "inference_ms": round(benchmark_metrics["inference_ms"]) if benchmark_metrics["inference_ms"] is not None else None
     })
 
     for _ in range(5):

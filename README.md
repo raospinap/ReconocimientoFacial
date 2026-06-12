@@ -101,7 +101,7 @@ La barra lateral incluye un selector de rendimiento para adaptar la cámara al e
 
 | Modo | Uso recomendado | Comportamiento |
 | :--- | :--- | :--- |
-| **Auto** | Uso general | Mide FPS de cámara al iniciar, selecciona `Lento`, `Normal` o `Rápido` y reabre la cámara para evitar recortes de driver. |
+| **Auto** | Uso general | Mide FPS de cámara y latencia real de inferencia con DeepFace, selecciona `Lento`, `Normal` o `Rápido` y reabre la cámara para evitar recortes de driver. |
 | **Lento** | Equipos antiguos o cámara básica | Procesa a baja resolución, detecta y reconoce con menor frecuencia, y prioriza el rostro principal. |
 | **Normal** | Equipos intermedios | Equilibra resolución, frecuencia de detección y respuesta visual. |
 | **Rápido** | Equipos con mejor CPU | Usa mayor resolución y mayor frecuencia de reconocimiento. |
@@ -113,6 +113,30 @@ En asistencia, el sistema compara primero contra estudiantes matriculados en la 
 * estudiante matriculado y registrado,
 * estudiante enrolado pero no matriculado,
 * rostro no registrado.
+
+### Configuración avanzada
+
+Los parámetros de rendimiento y umbrales biométricos se pueden ajustar en:
+
+```text
+data/meta/performance_config.json
+```
+
+Campos principales:
+
+| Campo | Descripción |
+| :--- | :--- |
+| `attendance_match_threshold` | Umbral mínimo para aceptar una coincidencia de asistencia. Subirlo reduce falsos positivos, pero puede aumentar rechazos. |
+| `enroll_dup_threshold` | Umbral para bloquear posibles duplicados durante el enrolamiento. |
+| `brightness_min` / `brightness_max` | Rango de iluminación aceptable antes de procesar. |
+| `sharpness_min` | Nitidez mínima del frame. |
+| `display_resolution` | Tamaño visual de la ventana OpenCV. No cambia necesariamente la resolución de procesamiento. |
+| `modes.*.resolution` | Resolución de procesamiento por modo. |
+| `modes.*.detect_every` | Cada cuántos frames se ejecuta detección facial. |
+| `modes.*.recognize_every` | Cada cuántos frames se calcula embedding/reconocimiento. |
+| `modes.*.max_faces` | Número máximo de rostros procesados por frame. |
+
+Después de cambiar este archivo, reinicia la aplicación para que el worker de IA cargue los nuevos valores.
 
 ## 📄 Documentación Técnica
 

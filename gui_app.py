@@ -379,7 +379,13 @@ class ReconApp(ctk.CTk):
                 msg = "Rostro no registrado"
                 color = "#e74c3c"
             elif status == "mode_selected":
-                msg = f"Modo activo: {res.get('mode', 'auto')} - {res.get('resolution', '')}"
+                metrics = []
+                if res.get("fps") is not None:
+                    metrics.append(f"{res['fps']} FPS")
+                if res.get("inference_ms") is not None:
+                    metrics.append(f"{res['inference_ms']} ms IA")
+                suffix = f" ({', '.join(metrics)})" if metrics else ""
+                msg = f"Modo activo: {res.get('mode', 'auto')} - {res.get('resolution', '')}{suffix}"
                 color = "#3498db"
             elif status == "camera_error":
                 msg = f"Error de cámara: {res.get('message', 'No disponible')}"
